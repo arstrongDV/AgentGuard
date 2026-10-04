@@ -1,6 +1,14 @@
 # Backend Implementation Plan
 
-Current state: `app/main.py` (FastAPI + CORS + `/health`) and `app/config.py` (pydantic-settings).
+**Status (2026-10-04): steps 1–6, 9 and 10 are implemented**, plus the MCP proxy part of step 5. 120 tests pass offline.
+Not yet built: mock MCP servers + demo agent (steps 5/7), semantic layer (step 8), the signature feed *URL* refresh
+(file reload works), `bench.py`, packaging (step 11). Implementation notes that differ from the original plan:
+- Audit store uses stdlib `sqlite3` behind a lock instead of `aiosqlite` (sub-millisecond writes, one less dependency).
+- SSE is a plain `StreamingResponse`; `sse-starlette` is not needed.
+- Policy edits use `ruamel.yaml` round-trip so comments survive dashboard changes.
+- Event paging uses the event id (monotonic ULID) as the cursor.
+
+Original starting point: `app/main.py` (FastAPI + CORS + `/health`) and `app/config.py` (pydantic-settings).
 We grow this package step by step and keep the app runnable after every step.
 
 ## Dependencies

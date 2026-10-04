@@ -1,24 +1,54 @@
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import settings
+from app.api import admin, events, llm, mcp
+from app.config import Settings, settings as default_settings
+from app.services import Services
 
-app = FastAPI(title=settings.app_name, debug=settings.debug)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 
-@app.get("/")
-def read_root():
-    return {"message": f"{settings.app_name} is running"}
+def create_app(settings: Settings | None = None) -> FastAPI:
+    settings = settings or default_settings
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        services = Services(settings)
+        app.state.services = services
+        stop = asyncio.Event()
+        watcher = asyncio.create_task(services.watch(stop)) if settings.watch_policy else None
+        try:
+            yield
+        finally:
+            stop.set()
+            if watcher:
+                watcher.cancel()
+                await asyncio.gather(watcher, return_exceptions=True)
+            await services.aclose()
+
+    app = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["x-agentguard-decision", "x-agentguard-trace-id", "x-agentguard-risk"],
+    )
+
+    @app.get("/")
+    def read_root():
+        return {"message": f"{settings.app_name} is running"}
+
+    app.include_router(admin.router)
+    app.include_router(events.router)
+    app.include_router(llm.router)
+    app.include_router(mcp.router)
+    return app
 
 
-@app.get("/health")
-def health_check():
-    return {"status": "ok", "environment": settings.environment}
+app = create_app()

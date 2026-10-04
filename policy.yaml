@@ -1,0 +1,98 @@
+# AgentGuard policy. Saved changes are hot-reloaded within ~1 second (no restart needed).
+# The dashboard edits this same file, so it stays the single source of truth.
+# Schema: backend/docs/policy-schema.md
+
+version: 1
+mode: enforce            # monitor | enforce  (monitor = log what would happen, never block)
+strictness: medium       # low | medium | high (presets: thresholds, loop limits, PII handling)
+block_status_code: 200   # 200 = friendly assistant message, 403 = hard error for strict clients
+
+models_allowed: [qwen2.5:7b, llama3.1:8b, mock]
+
+# USD per 1K tokens. Local models use a VIRTUAL price to show cloud-equivalent spend.
+costs:
+  qwen2.5:7b:
+    input: 0.0002
+    output: 0.0006
+    virtual: true
+  llama3.1:8b:
+    input: 0.0002
+    output: 0.0006
+    virtual: true
+  mock:
+    input: 0.0002
+    output: 0.0006
+    virtual: true
+
+controls:
+  pii:
+    action: redact             # prompts sent to the model
+    tool_args_action: allow    # tools legitimately receive PII (send_email.to): detect, don't rewrite
+    entities: [EMAIL, IBAN, PHONE, CREDIT_CARD]
+  secrets:
+    action: block              # an agent should never send credentials
+    outbound_action: redact
+  banned_topics:
+    action: block
+    terms: [internal salary, merger plan]
+  prompt_injection:
+    action: block
+    threshold: 0.85
+    monitor_below: 0.6
+    gate: 0.3                  # risk above which the ML classifier runs
+  llm_judge:
+    enabled: false
+    model: granite3-guardian:2b
+    only_for_risk_above: 0.5
+    timeout_s: 3
+    on_timeout: allow
+  signatures:
+    feed: ./feeds/signatures.json
+    refresh_s: 60
+  loop:
+    window_s: 60               # max_repeats comes from strictness (low 8, medium 5, high 3)
+  rate_limit:
+    requests_per_minute: 60
+
+# Fixed upstreams: the proxy is never an open relay.
+mcp_servers:
+  crm:
+    url: http://localhost:9001/mcp
+  email:
+    url: http://localhost:9002/mcp
+  bank:
+    url: http://localhost:9003/mcp
+
+high_risk_tools: [transfer_money, send_email]
+
+agents:
+  support-bot:
+    description: Customer support assistant
+    key_sha256: 814e68ecd89fbcc2d02f3e1221b188a0e98403d4bbdc03e70cc9f0a6536e3504  # demo key: ag-support-demo-key
+    tools_allowed: [search_customers, get_customer, send_email]
+    tool_args:
+      send_email:
+        to:
+          pattern: "@ourbank\\.com$"
+    budget:
+      tokens_per_day: 200000
+      usd_per_day: 2.0
+      max_tool_calls_per_task: 20
+
+  finance-bot:
+    description: Back-office payments assistant
+    key_sha256: 1f8b71f47a4efb568f97d7ff89af756e6abce258547d81fb74f325f9c121030b  # demo key: ag-finance-demo-key
+    strictness: high
+    tools_allowed: [get_customer, get_balance]
+    tools_need_approval: [transfer_money]
+    tool_args:
+      transfer_money:
+        amount:
+          max: 1000
+    approval:
+      timeout_s: 60
+      on_timeout: deny
+    budget:
+      tokens_per_day: 100000
+      usd_per_day: 1.0
+      max_tool_calls_per_task: 10

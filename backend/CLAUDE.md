@@ -7,7 +7,7 @@ Design docs: [docs/](docs/README.md). Start with [docs/implementation-plan.md](d
 
 ```bash
 source venv/bin/activate
-pip install -r requirements.txt            # add requirements-ml.txt for semantic checks
+pip install -r requirements-dev.txt        # runtime + pytest (requirements-ml.txt later, for semantic checks)
 uvicorn app.main:app --reload --port 8000  # OpenAPI at /docs
 pytest -q                                  # must pass with no Ollama, no internet
 pytest -q -k attacks                       # one test group
@@ -36,6 +36,8 @@ app/
   checks/            one file per check, each `async def run(ctx, policy) -> CheckResult`
     auth.py tool_acl.py model_allowlist.py signatures.py secrets.py pii.py
     budget.py loop.py injection.py judge.py output.py
+    (as built: gates.py = model allowlist + tool ACL, budget.py = rate/budget/task/loop,
+     signatures.py = feed + banned topics, pii.py, secrets.py, redact.py)
   providers/
     ollama.py        httpx client to Ollama's OpenAI-compatible API
     mock.py          deterministic fake LLM for tests / offline demo
@@ -54,13 +56,13 @@ tests/
 
 ## Conventions
 
-- **Every check is a pure-ish async function** with the same signature and returns `CheckResult(findings, decision, score, latency_ms)`. No check calls another check. Ordering and gating belong to `pipeline.py` only.
+- **Every check is an async function** `run(ctx, rt) -> CheckResult` (`rt` = policy snapshot + feed + state), registered in `app/checks/__init__.py` with its tier and stages. No check calls another check. Ordering, gating and timing belong to `core/pipeline.py` only.
 - **Tiers**: `T0` identity/policy/ACL/budget pre-check → `T1` deterministic (signatures, secrets, PII, loop) → `T2` semantic (DeBERTa injection), gated → `T3` LLM judge, gated. If a tier blocks, the next tier is skipped.
 - **Mode `monitor`** never blocks. It records what *would* have happened (`monitor_only: true`).
 - **Redaction** replaces spans with typed placeholders: `[EMAIL_1]`, `[IBAN_1]`. Keep the original only in the audit DB, never in the forwarded payload.
 - **ML models load lazily and degrade gracefully.** If the model is missing, log a warning and fall back to the heuristic (signatures). Never crash the gateway because of a model.
 - **Tests never hit Ollama or Hugging Face.** Use `LLM_PROVIDER=mock` and monkeypatch the classifier.
-- Every check writes its latency into `ctx.timings`. Metrics and the dashboard p50/p95 depend on it.
+- The pipeline writes every check's latency into `ctx.timings`. Metrics and the dashboard p50/p95 depend on it.
 - Use `httpx.AsyncClient` (shared, created in lifespan) for upstream calls. No `requests`.
 - Type hints everywhere. Pydantic models for every request/response body.
 - AuditEvent schema changes must be mirrored in `frontend/src/types/api.ts`.

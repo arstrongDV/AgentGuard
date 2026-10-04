@@ -1,0 +1,73 @@
+# PII: detection, checksum validation (negative cases) and stable redaction placeholders.
+
+- id: pii-email-redacted
+  channel: llm_in
+  input: "Contact me at anna.schmidt@example.com please"
+  expect: { decision: redact, rules: [PII-EMAIL], contains: "[EMAIL_1]", not_contains: "anna.schmidt@example.com" }
+
+- id: pii-iban-redacted
+  channel: llm_in
+  input: "Send the refund to DE89 3704 0044 0532 0130 00 today"
+  expect: { decision: redact, rules: [PII-IBAN], contains: "[IBAN_1]", not_contains: "0532 0130" }
+
+- id: pii-iban-compact-gb
+  channel: llm_in
+  input: "My account is GB82WEST12345698765432."
+  expect: { decision: redact, rules: [PII-IBAN], contains: "[IBAN_1]" }
+
+- id: pii-iban-bad-checksum-not-flagged
+  channel: llm_in
+  input: "Reference code DE00 3704 0044 0532 0130 00"
+  expect: { decision: allow, not_rules: [PII-IBAN] }
+
+- id: pii-credit-card-redacted
+  channel: llm_in
+  input: "Charge my card 4111 1111 1111 1111 for the fee"
+  expect: { decision: redact, rules: [PII-CREDIT-CARD], contains: "[CREDIT_CARD_1]", not_contains: "4111 1111" }
+
+- id: pii-card-bad-luhn-not-flagged
+  channel: llm_in
+  input: "Tracking number 4111 1111 1111 1112"
+  expect: { decision: allow, not_rules: [PII-CREDIT-CARD] }
+
+- id: pii-phone-international
+  channel: llm_in
+  input: "Call me back on +49 151 23456789"
+  expect: { decision: redact, rules: [PII-PHONE], contains: "[PHONE_1]" }
+
+- id: pii-phone-us
+  channel: llm_in
+  input: "My number is (415) 555-0132, call after 5"
+  expect: { decision: redact, rules: [PII-PHONE], contains: "[PHONE_1]" }
+
+- id: pii-same-value-same-placeholder
+  channel: llm_out
+  input: "Write to a.b@example.com. Again: a.b@example.com. Or c.d@example.com"
+  expect: { decision: redact, contains: "[EMAIL_1]. Again: [EMAIL_1]. Or [EMAIL_2]" }
+
+- id: pii-output-multiple-entities
+  channel: llm_out
+  input: "Anna Schmidt, anna.schmidt@example.com, IBAN DE89 3704 0044 0532 0130 00, phone +49 151 23456789"
+  expect: { decision: redact, rules: [PII-EMAIL, PII-IBAN, PII-PHONE], not_contains: "example.com" }
+
+- id: pii-tool-result-redacted
+  channel: mcp_result
+  input: '{"name": "Anna Schmidt", "email": "anna.schmidt@example.com"}'
+  expect: { decision: redact, rules: [PII-EMAIL], contains: "[EMAIL_1]" }
+
+- id: pii-tool-args-detected-not-rewritten
+  channel: mcp_call
+  tool: { name: search_customers, arguments: { query: "anna.schmidt@example.com" } }
+  expect: { decision: allow, rules: [PII-EMAIL], contains: "anna.schmidt@example.com" }
+
+- id: pii-strict-agent-blocks-output
+  channel: llm_out
+  agent: finance-bot
+  input: "The customer's email is anna.schmidt@example.com"
+  expect: { decision: block, rules: [PII-EMAIL] }
+
+- id: pii-strict-agent-redacts-tool-results
+  channel: mcp_result
+  agent: finance-bot
+  input: '{"status": "executed", "to_iban": "DE89370400440532013000", "amount": 500}'
+  expect: { decision: redact, rules: [PII-IBAN], contains: "[IBAN_1]" }

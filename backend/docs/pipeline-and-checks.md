@@ -7,9 +7,11 @@ class Check(Protocol):
     name: str            # "pii", "secrets", ...
     tier: Literal[0, 1, 2, 3]
     applies_to: set[Literal["llm_in", "llm_out", "mcp_call", "mcp_result"]]
-    async def run(self, ctx: RequestContext, policy: PolicySnapshot) -> CheckResult: ...
+    run: Callable[[RequestContext, Runtime], Awaitable[CheckResult]]  # Runtime = policy snapshot + signature feed + state
 ```
-`CheckResult = {decision, findings[], score: float, redacted_texts?: list[str], latency_ms, skipped_reason?}`
+`CheckResult = {decision, findings[], replacements: {text index → redacted text}}`. The pipeline measures latency
+and records `CheckTiming {check, tier, ms, skipped_reason?}`; checks never time themselves. A check that raises is
+recorded as a `CHECK-ERROR` finding and treated as allow (fail open), so one broken rule cannot take the gateway down.
 
 The pipeline (`core/pipeline.py`) is the only place that knows about ordering, gating and short-circuiting.
 
@@ -115,7 +117,7 @@ This is an early warning even when the agent does not use our MCP proxy.
 | injection threshold | 0.95 | 0.85 | 0.70 |
 | T2 gate (risk) | 0.5 | 0.3 | always |
 | judge band | off | 0.5–0.85 | 0.3–0.85 + all tool calls |
-| PII action | redact | redact | block outbound |
+| PII action | redact | redact | block in LLM answers (tool results still redacted) |
 | loop max_repeats | 8 | 5 | 3 |
 
 Explicit values in a control override the preset.

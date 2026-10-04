@@ -18,7 +18,7 @@ costs:                        # USD per 1K tokens. Local models get a VIRTUAL pr
   llama3.1:8b: { input: 0.0002, output: 0.0006, virtual: true }
 
 controls:
-  pii:              { action: redact, entities: [EMAIL, IBAN, PHONE, CREDIT_CARD] }
+  pii:              { action: redact, tool_args_action: allow, entities: [EMAIL, IBAN, PHONE, CREDIT_CARD] }
   secrets:          { action: block, outbound_action: redact }
   banned_topics:    { action: block, terms: ["internal salary", "merger plan"] }
   prompt_injection: { action: block, threshold: 0.85, monitor_below: 0.6, gate: 0.3 }
@@ -58,6 +58,18 @@ agents:
     approval: { timeout_s: 60, on_timeout: deny }
     budget: { tokens_per_day: 100000, usd_per_day: 1.0, max_tool_calls_per_task: 10 }
 ```
+
+> The real `policy.yaml` uses **block style** (one key per line) rather than the compact inline maps above:
+> `ruamel.yaml` round-trips block style byte for byte, so a dashboard edit changes only the lines it touches.
+
+### PII actions per direction
+
+| Stage | Setting | Default |
+|---|---|---|
+| prompt → model (`llm_in`) | `pii.action` | redact |
+| model → user (`llm_out`) | `pii.outbound_action`, else the strictness preset (`high` → block), else `pii.action` | redact |
+| agent → tool arguments (`mcp_call`) | `pii.tool_args_action` | **allow** (detect only: `send_email.to` must stay a real address) |
+| tool → agent results (`mcp_result`) | `pii.outbound_action`, else `pii.action` | redact (never blocked by the preset, or agents could not read records) |
 
 ## Pydantic model rules
 
