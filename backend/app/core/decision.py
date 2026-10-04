@@ -57,6 +57,8 @@ class CheckResult:
     findings: list[Finding] = field(default_factory=list)
     # index into ctx.texts -> replacement text (redaction)
     replacements: dict[int, str] = field(default_factory=dict)
+    # set when the check found out it could not run (dependency down): recorded as a skip, not as a run
+    skipped_reason: str | None = None
 
 
 def risk_score(findings: list[Finding]) -> float:

@@ -9,6 +9,7 @@ Planning docs for the whole project. Backend and frontend have their own deeper 
 | [03-roadmap.md](03-roadmap.md) | You want to know what to build next, who owns what, and the cut lines |
 | [04-demo-script.md](04-demo-script.md) | You are preparing the live demo or the pitch |
 | [05-judging-map.md](05-judging-map.md) | You want to check that every scoring criterion has visible evidence |
+| [06-testing-guide.md](06-testing-guide.md) | You want to test AgentGuard by hand: what to run, what to type, what you should see |
 
 Deeper docs:
 - Backend: [../backend/docs/](../backend/docs/README.md): pipeline, checks, policy schema, MCP proxy, API contract, tests

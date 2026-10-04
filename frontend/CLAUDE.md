@@ -21,10 +21,10 @@ npm run lint      # oxlint
 - `tailwindcss` v4 via `@tailwindcss/vite`; tokens in `src/index.css` `@theme` (`bg surface surface-2 line fg muted accent` +
   decision colors `allow redact approval block`). The reset lives in `@layer base` so utilities always win.
 - `clsx` for conditional classes
-- + `recharts` for charts (Overview, Budgets)
+- `recharts` for the Overview time series (lazy-loaded with the page); simple bars are plain HTML
 - `react-icons` for icons: `react-icons/lu` (Lucide set) for UI icons, `react-icons/si` (Simple Icons) for brand logos
 
-## Layout (built: shell, Live Feed, Approvals; the other pages are `ComingSoon` placeholders)
+## Layout (all pages built; pages are lazy-loaded route chunks)
 
 ```
 src/
@@ -41,7 +41,8 @@ src/
     Budgets.tsx              spend per agent and model vs limits
     Policy.tsx               mode + strictness switches, per-control toggles, raw YAML view
     Audit.tsx                filters + CSV / JSONL export
-    AttackLab.tsx            (stretch) buttons that run demo scenarios
+    AttackLab.tsx            run demo scenarios from the browser (POST /api/demo/run), progress per step
+  components/ui.tsx          Card, StatTile, Segmented, Meter, Chip; components/AdminToken.tsx (shared)
 ```
 
 ## Conventions

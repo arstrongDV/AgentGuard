@@ -22,9 +22,14 @@ def list_events(
     agent: str | None = None,
     decision: str | None = None,
     category: str | None = None,
+    channel: str | None = None,
+    task: str | None = None,
+    from_: str | None = Query(None, alias="from"),
+    to: str | None = None,
 ):
     """Newest first. Page with `before=<next_before>` (an event id; ids sort by time)."""
-    items = svc.audit.query(limit=limit, before_id=before, agent=agent, decision=decision, category=category)
+    items = svc.audit.query(limit=limit, before_id=before, agent=agent, decision=decision, category=category, channel=channel,
+                            task=task, since=from_, until=to)
     return {"items": [e.public() for e in items], "next_before": items[-1].id if len(items) == limit else None}
 
 

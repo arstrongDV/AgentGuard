@@ -16,6 +16,7 @@ from app.config import Settings
 from app.core.events import AuditEvent
 from app.core.ids import iso, utcnow
 from app.core.pipeline import Runtime
+from app.demo_runs import DemoRunner
 from app.ml import MLRuntime
 from app.ml.injection import InjectionClassifier
 from app.ml.judge import LlmJudge
@@ -52,6 +53,7 @@ class Services:
         self.provider: LLMProvider = self._make_provider()
         self._ollama_probe = OllamaProvider(settings.ollama_url, self.llm_http, settings.llm_timeout_s)  # cached reachability
         self.ml = MLRuntime(classifier=self._make_classifier(), judge=self._make_judge())
+        self.demo = DemoRunner(settings.self_url, settings.demo_model)
         self.counters: Counter[tuple[str, ...]] = Counter()  # Prometheus /metrics
         self.latency_sum: Counter[str] = Counter()
         self.latency_count: Counter[str] = Counter()
@@ -232,6 +234,7 @@ class Services:
                 log.debug("reconcile skipped: %s", e)
 
     async def aclose(self) -> None:
+        await self.demo.aclose()
         await self.http.aclose()
         await self.llm_http.aclose()
         self.audit.close()

@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     models_dir: Path = BACKEND_DIR / "models"
     judge_enabled: bool = True  # T3 LLM judge via Ollama; skipped automatically while Ollama is unreachable
 
+    # Attack Lab: the demo agent calls this gateway through its public endpoints, like a real agent would
+    self_url: str = "http://127.0.0.1:8000"
+    demo_model: str = "qwen2.5:3b"  # docker-compose sets it from AGENT_MODEL
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     @property

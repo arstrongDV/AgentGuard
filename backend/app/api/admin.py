@@ -29,6 +29,7 @@ async def health(svc: Services = Depends(get_services)):
         "status": "ok",
         "environment": svc.settings.environment,
         "llm": await svc.provider.status(),
+        "llm_detail": getattr(svc.provider, "last_fallback", "") and f"fell back to the mock LLM: {svc.provider.last_fallback}",
         "ml": svc.ml.classifier.status if svc.ml.classifier else "disabled",
         "ml_detail": svc.ml.classifier.detail if svc.ml.classifier else "",
         "judge": await svc.judge_status(),
@@ -83,6 +84,8 @@ def get_policy(svc: Services = Depends(get_services)):
             "feed": {"version": svc.feed.version, "signatures": svc.feed.count},
             "agents": {agent_id: a.model_dump(mode="json") for agent_id, a in snapshot.agents.items()},
         },
+        # as written in the file (after ${ENV} expansion): tells "strictness set on the agent" from "inherited"
+        "raw": snapshot.policy.model_dump(mode="json"),
     }
 
 
@@ -116,8 +119,13 @@ def merge_patch(target: Any, patch: Any) -> Any:
             target.pop(key, None)
         elif isinstance(value, dict) and isinstance(target.get(key), dict):
             merge_patch(target[key], value)
-        else:
+        elif key in target or not hasattr(target, "insert"):
             target[key] = value
+        else:
+            # a new key goes after the mapping's leading simple settings (e.g. an agent's description and key),
+            # not at the end, where it would land after the blank line that separates blocks in policy.yaml
+            position = next((i for i, v in enumerate(target.values()) if isinstance(v, (dict, list))), len(target))
+            target.insert(position, key, value)
     return target
 
 
@@ -175,9 +183,12 @@ def export_audit(
     from_: str | None = Query(None, alias="from"),
     to: str | None = None,
     agent: str | None = None,
+    decision: str | None = None,
+    category: str | None = None,
+    channel: str | None = None,
     svc: Services = Depends(get_services),
 ):
-    events = svc.audit.iterate(since=from_, until=to, agent=agent)
+    events = svc.audit.iterate(since=from_, until=to, agent=agent, decision=decision, category=category, channel=channel)
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     if format == "jsonl":
         body: Iterator[str] = (e.model_dump_json() + "\n" for e in events)
@@ -196,7 +207,7 @@ def csv_rows(events: Iterator[AuditEvent]) -> Iterator[str]:
     for e in events:
         writer.writerow([
             e.id, e.ts, e.trace_id, e.task_id, e.agent_id, e.channel, e.direction, e.decision.value, e.monitor_only,
-            e.would_have.value if e.would_have else "", e.risk, " ".join(f.rule_id for f in e.findings),
+            e.would_have.value if e.would_have else "", e.risk, " ".join(dict.fromkeys(f.rule_id for f in e.findings)),
             " ".join(sorted({f.category for f in e.findings})), e.model or "",
             f"{e.tool.server}.{e.tool.name}" if e.tool else "", e.summary, e.total_ms, e.upstream_ms or "",
             e.tokens.prompt if e.tokens else "", e.tokens.completion if e.tokens else "",

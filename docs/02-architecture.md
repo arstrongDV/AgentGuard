@@ -2,41 +2,48 @@
 
 ## System diagram
 
+![AgentGuard architecture](images/architecture.png)
+
+Source (Mermaid):
+
 ```mermaid
 flowchart LR
   subgraph Clients
-    A[Demo agent<br/>openai SDK + MCP client]
+    A[Agent<br/>OpenAI SDK + MCP client]
     X[Any OpenAI-compatible agent]
   end
 
-  subgraph GW[AgentGuard gateway: FastAPI :8000]
-    L[/v1/chat/completions<br/>LLM Gateway/]
-    M[/mcp/&#123;server&#125;<br/>MCP Proxy/]
-    P[[Check pipeline<br/>T0 → T1 → T2 → T3]]
-    PS[(Policy store<br/>policy.yaml + watcher)]
-    SF[(Signature feed<br/>feeds/signatures.json)]
-    AU[(Audit store<br/>SQLite + JSONL)]
-    BUS{{Event bus}}
-    API[/api/*<br/>dashboard API + SSE/]
+  subgraph GW[AgentGuard gateway · FastAPI :8000]
+    L["/v1/chat/completions<br/>LLM Gateway"]
+    M["/mcp/#123;server#125;<br/>MCP Proxy"]
+    P[[Check pipeline<br/>T0 gates → T1 rules → T2 ML → T3 judge]]
+    ML[(T2 injection classifier<br/>DeBERTa · ONNX · sha256-pinned)]
+    PS[(policy.yaml<br/>hot-reloaded)]
+    SF[(signatures.json<br/>43 attack signatures)]
+    AU[(Audit log<br/>SQLite + JSONL)]
+    API["/api/* · SSE · /metrics"]
   end
 
-  O[Ollama :11434<br/>qwen2.5 / llama3.1<br/>granite3-guardian]
-  CRM[Mock MCP: CRM :9001]
-  EM[Mock MCP: Email :9002]
-  BK[Mock MCP: Bank :9003]
-  UI[React dashboard :5173]
+  O[Ollama<br/>qwen2.5 · granite3-guardian judge]
+  subgraph TOOLS[MCP servers]
+    CRM[CRM :9001]
+    EM[Email :9002]
+    BK[Bank :9003]
+  end
+  UI[React dashboard<br/>feed · approvals · policy · attack lab]
 
   A --> L
   X --> L
   A --> M
   L --> P
   M --> P
-  P --> PS
-  P --> SF
+  P --- ML
+  P --- PS
+  P --- SF
   P -->|forward| O
-  P -->|forward| CRM & EM & BK
-  P --> AU --> BUS --> API --> UI
-  UI -->|PATCH policy / approve| API
+  P -->|forward| TOOLS
+  P --> AU --> API --> UI
+  UI -->|policy edits · approvals · run attacks| API
 ```
 
 ## Request lifecycle (both entry points)
@@ -78,8 +85,8 @@ event still records which checks ran and how long each took.
 
 | Service | Image / build | Port | Notes |
 |---|---|---|---|
-| `ollama` *(profile `ollama`)* | `ollama/ollama` | 11434 | volume for models |
-| `ollama-init` *(profile `ollama`)* | `ollama/ollama` | — | one-shot `ollama pull qwen2.5:7b` + `granite3-guardian:2b`. Until it finishes, `LLM_PROVIDER=auto` answers with the mock LLM |
+| `ollama` *(profile `llm`)* | `ollama/ollama:0.35.1` | 11434 | models in the `ollama-models` volume; one model in memory at a time, unloaded after 10 min idle |
+| `ollama-init` *(profile `llm`)* | `ollama/ollama:0.35.1` | — | one-shot `ollama pull $AGENT_MODEL` (default `qwen2.5:3b`) + `$JUDGE_MODEL` (`granite3-guardian:2b`). Until it finishes, `LLM_PROVIDER=auto` answers with the mock LLM. Or point `OLLAMA_URL` at an Ollama app on the host |
 | `gateway` | `backend/Dockerfile` (context: repo root) | 8000 | mounts the repo at `/workspace` (live `policy.yaml` + `feeds/`), named volume for the audit DB |
 | `mcp` | backend image (`python -m demo.mcp_servers`) | 9001–9003 | CRM, Email, Bank in one container (MCP SDK, streamable HTTP) |
 | `dashboard` | `frontend/Dockerfile` (build → nginx) | 5173 (`DASHBOARD_PORT`) | `VITE_API_URL=http://localhost:8000` baked at build |

@@ -1,6 +1,6 @@
 # API Contract (backend ↔ frontend ↔ agents)
 
-**Status: implemented** (except `/api/demo/run`). The shapes below are what the backend returns today.
+**Status: implemented**, including the Attack Lab endpoints. The shapes below are what the backend returns today.
 
 **Freeze this at hour 0.** Additive changes are OK. Breaking changes need both owners to agree and must update
 `frontend/src/types/api.ts` in the same commit.
@@ -23,17 +23,19 @@ Read endpoints are open in dev. Mutations need `Authorization: Bearer <ADMIN_TOK
 |---|---|---|
 | GET | `/health` | `{status, environment, llm: "ollama"|"mock"|"offline", ml: "loaded"|"loading"|"unavailable"|"disabled", ml_detail, judge: "available"|"unavailable"|"disabled", policy_version, feed_version, signatures}` |
 | GET | `/metrics` | Prometheus text format: `agentguard_events_total`, `agentguard_findings_total`, `agentguard_check_skipped_total`, `agentguard_check_latency_ms` (summary), approvals pending, signatures, ML loaded, policy info |
-| GET | `/api/events?limit=100&before=<event id>&agent=&decision=&category=` | `{items: AuditEvent[], next_before: string \| null}`, newest first. Paging cursor is an event id (ids sort by time), not a timestamp: many events share a millisecond. Items omit `original_text`/`redacted_text` |
+| GET | `/api/events?limit=100&before=<event id>&agent=&decision=&category=&channel=&task=&from=&to=` | `{items: AuditEvent[], next_before: string \| null}`, newest first. Paging cursor is an event id (ids sort by time), not a timestamp: many events share a millisecond. Items omit `original_text`/`redacted_text` |
 | GET | `/api/events/stream` | SSE. `event: audit` → AuditEvent (without bodies); `event: system` → SystemEvent; `event: ping` every 15 s |
 | GET | `/api/events/{id}` | AuditEvent (full, including originals) |
 | GET | `/api/metrics?window=15m\|1h\|24h` | Metrics |
 | GET | `/api/budgets` | BudgetStatus[] |
-| GET | `/api/policy` | `{version, yaml: string, effective: object}` |
+| GET | `/api/policy` | `{version, yaml: string, effective: {mode, strictness, feed, agents}, raw: Policy}` (`raw` = as written: `null` means inherited) |
 | PATCH | `/api/policy` | JSON merge-patch (`null` deletes a key) → `{version}` or 422 `{error, path}`. Comments and layout of `policy.yaml` are preserved |
 | GET | `/api/approvals?status=pending\|approved\|denied\|timeout` | Approval[] (pending first, then the most recent 200 resolved) |
 | POST | `/api/approvals/{id}` | body `{decision: "approve"|"deny", note?}` → Approval. 404 unknown, 409 already resolved |
-| GET | `/api/audit/export?format=csv\|jsonl&from=&to=&agent=` | file download (streamed) |
-| POST | `/api/demo/run` *(stretch)* | body `{scenario, agent}`, which runs the demo agent in the background |
+| GET | `/api/audit/export?format=csv\|jsonl&from=&to=&agent=&decision=&category=&channel=` | file download (streamed, oldest first) |
+| GET | `/api/demo/scenarios` | `[{name, title, agent, prompt, stops_it, steps: [{kind, label, note, expect}]}]` |
+| POST | `/api/demo/run` | body `{scenario}` (admin) → DemoRun. Runs the demo agent against this gateway's public endpoints (`SELF_URL`) in the background |
+| GET | `/api/demo/runs`, `/api/demo/runs/{id}` | DemoRun: `{id, scenario, agent, task_id, status: running\|done\|error, steps: [{status, decision, text, expect}], error}` |
 
 ## Types
 

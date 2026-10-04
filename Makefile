@@ -2,9 +2,10 @@
 PY      := $(CURDIR)/backend/venv/bin/python
 LLM     ?= mock            # mock | ollama   (make gateway LLM=ollama)
 GATEWAY ?= http://localhost:8000
+AGENT_MODEL ?= qwen2.5:3b  # model a real LLM run asks for (make demo-llm)
 
 .DEFAULT_GOAL := help
-.PHONY: help install models gateway mcp demo demo-all demo-live demo-llm seed test test-docker bench frontend up up-ollama down logs
+.PHONY: help install models gateway mcp demo demo-all demo-live demo-llm seed test test-docker bench frontend up up-llm up-host-ollama up-gpu down logs
 
 help:  ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
@@ -32,8 +33,8 @@ demo-all:  ## Every scenario, unattended
 demo-live:  ## Injection against finance-bot; YOU approve/deny on the dashboard
 	cd backend && $(PY) -m demo.agent --scenario injection_finance --gateway $(GATEWAY)
 
-demo-llm:  ## Let a real model drive the injection scenario (needs `make gateway LLM=ollama`)
-	cd backend && $(PY) -m demo.agent --scenario injection --mode llm --gateway $(GATEWAY)
+demo-llm:  ## Let a real model drive the injection scenario (needs Ollama: `make up-llm`, `make up-host-ollama`, or `make gateway LLM=ollama`)
+	cd backend && $(PY) -m demo.agent --scenario injection --mode llm --model $(AGENT_MODEL) --gateway $(GATEWAY)
 
 seed:  ## Fill the dashboard: run every scenario against the running stack
 	cd backend && $(PY) -m demo.agent --scenario all --auto-approve deny --gateway $(GATEWAY)
@@ -47,14 +48,20 @@ test-docker:  ## Run the test suite inside the backend image
 bench:  ## Gateway overhead benchmark: latency per check, % of traffic that reached the ML tier
 	cd backend && $(PY) scripts/bench.py
 
-up:  ## docker compose up: gateway + mock MCP servers + dashboard (mock LLM, no downloads after build)
+up:  ## Gateway + MCP servers + dashboard with the built-in mock LLM (fast, everything else real)
 	docker compose up --build
 
-up-ollama:  ## ...plus Ollama with qwen2.5:7b and granite3-guardian:2b (first run pulls ~6 GB)
-	docker compose --profile ollama up --build
+up-llm:  ## ...plus Ollama in Docker with a real LLM + judge (~7 GB image + ~4.6 GB models, needs ~8 GB Docker memory)
+	docker compose --profile llm up --build
 
-down:  ## Stop the stack
-	docker compose --profile ollama down
+up-host-ollama:  ## Use the Ollama app on this machine (Mac: Apple GPU, fast) instead of Ollama in Docker
+	OLLAMA_URL=http://host.docker.internal:11434 docker compose up --build
+
+up-gpu:  ## Ollama in Docker on an NVIDIA GPU (Linux / WSL2)
+	docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile llm up --build
+
+down:  ## Stop the stack (including Ollama)
+	docker compose --profile llm down
 
 logs:  ## Follow gateway logs
 	docker compose logs -f gateway

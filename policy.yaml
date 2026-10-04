@@ -7,10 +7,18 @@ mode: enforce            # monitor | enforce  (monitor = log what would happen, 
 strictness: medium       # low | medium | high (presets: thresholds, loop limits, PII handling)
 block_status_code: 200   # 200 = friendly assistant message, 403 = hard error for strict clients
 
-models_allowed: [qwen2.5:7b, llama3.1:8b, mock]
+models_allowed: [qwen2.5:3b, qwen2.5:7b, qwen2.5:1.5b, llama3.1:8b, mock]
 
 # USD per 1K tokens. Local models use a VIRTUAL price to show cloud-equivalent spend.
 costs:
+  qwen2.5:3b:
+    input: 0.0001
+    output: 0.0003
+    virtual: true
+  qwen2.5:1.5b:
+    input: 0.00005
+    output: 0.00015
+    virtual: true
   qwen2.5:7b:
     input: 0.0002
     output: 0.0006
@@ -42,9 +50,9 @@ controls:
     gate: 0.3                  # risk above which the ML classifier runs
   llm_judge:                   # T3: asked only about uncertain or high-risk traffic; skipped while Ollama is offline
     enabled: true
-    model: granite3-guardian:2b
+    model: ${JUDGE_MODEL:-granite3-guardian:2b}
     only_for_risk_above: 0.5
-    timeout_s: 3
+    timeout_s: 10              # generous: CPU-only Docker; the judge only sees a few % of traffic
     on_timeout: allow
   output_tool_calls:
     action: block              # the model proposes a tool this agent may not use (allow = only flag it)

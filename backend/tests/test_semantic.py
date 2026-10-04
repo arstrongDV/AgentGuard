@@ -19,6 +19,7 @@ from app.ml.injection import InjectionClassifier
 from app.ml.judge import JudgeUnavailable, LlmJudge, Verdict
 from app.policy.feed import load_feed
 from app.policy.store import PolicyStore
+from app.providers import UpstreamError
 from app.providers.auto import AutoProvider
 from app.providers.mock import MockProvider
 from app.providers.ollama import OllamaProvider
@@ -168,6 +169,7 @@ async def test_judge_unavailable_degrades_silently():
     down = FakeJudge(JudgeUnavailable("offline"))
     result = await run("llm_in", "My email is anna.schmidt@example.com, what is my status?", judge=down)
     assert "JUDGE-TIMEOUT" not in rules(result) and result.decision == "redact"
+    assert timing(result, "llm_judge").skipped_reason == "judge unavailable: offline"  # not counted as a run
     down.up, down.detail = False, "Ollama unreachable"
     result = await run("llm_in", "My email is anna.schmidt@example.com, what is my status?", judge=down)
     assert timing(result, "llm_judge").skipped_reason == "judge unavailable: Ollama unreachable"
@@ -350,3 +352,20 @@ async def test_classifier_sees_sentences_not_json():
     clf.calls.clear()
     result = await run("mcp_result", '{"status": "queued", "id": "m-1"}', classifier=clf)
     assert clf.calls == [] and timing(result, "injection").skipped_reason == "no natural-language text"
+
+
+async def test_auto_provider_falls_back_when_ollama_cannot_load_the_model():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/tags":
+            return httpx.Response(200, json={"models": []})
+        if json.loads(request.content)["model"] == "bad-request":
+            return httpx.Response(400, json={"error": "invalid tool schema"})
+        return httpx.Response(500, json={"error": "model requires more system memory (5.5 GiB) than is available (3.1 GiB)"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        provider = AutoProvider(OllamaProvider("http://ollama", http, 5), MockProvider())
+        reply = await provider.chat({"model": "qwen2.5:7b", "messages": [{"role": "user", "content": "hi"}]})
+        assert reply["choices"][0]["message"]["content"] == "Echo: hi"
+        assert "more system memory" in provider.last_fallback
+        with pytest.raises(UpstreamError):  # the caller's own mistakes are not hidden behind the mock
+            await provider.chat({"model": "bad-request", "messages": [{"role": "user", "content": "hi"}]})

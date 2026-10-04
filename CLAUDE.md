@@ -38,7 +38,7 @@ make gateway         # :8000, mock LLM (LLM=ollama for a real model)
 make mcp             # mock CRM/Email/Bank MCP servers :9001-9003
 make demo            # benign run + 3 attacks; `make help` lists the rest
 make test            # must pass WITHOUT Ollama or network
-# target
+# Docker (verified): mock LLM by default; `make up-llm` adds Ollama in Docker, `make up-host-ollama` uses the Mac GPU
 docker compose up    # must work on first try
 ```
 

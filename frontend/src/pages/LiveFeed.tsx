@@ -22,6 +22,7 @@ export function LiveFeed() {
   const decision = params.get('decision') ?? ''
   const channel = params.get('channel') ?? ''
   const category = params.get('category') ?? ''
+  const task = params.get('task') ?? ''
   const query = params.get('q') ?? ''
   const selectedId = params.get('event') // in the URL, so an event can be linked to and survives reloads
   const setFilter = (key: string, value: string) =>
@@ -43,13 +44,14 @@ export function LiveFeed() {
         (!decision || (decision === 'monitor' ? e.monitor_only : e.decision === decision)) &&
         (!channel || e.channel === channel) &&
         (!category || e.findings.some((f) => f.category === category)) &&
+        (!task || e.task_id === task) &&
         (!q ||
           e.summary.toLowerCase().includes(q) ||
           e.agent_id.includes(q) ||
           e.tool?.name.includes(q) ||
           e.findings.some((f) => f.rule_id.toLowerCase().includes(q) || f.category.includes(q))),
     )
-  }, [events, agent, decision, channel, category, query])
+  }, [events, agent, decision, channel, category, task, query])
 
   const selected = useMemo(() => events.find((e) => e.id === selectedId) ?? liveEvents.find((e) => e.id === selectedId) ?? null, [
     events,
@@ -80,7 +82,7 @@ export function LiveFeed() {
     [setParams],
   )
   const close = useCallback(() => setSelectedId(null), [setSelectedId])
-  const filtered = agent || decision || channel || category || query
+  const filtered = agent || decision || channel || category || task || query
 
   return (
     <div className="space-y-4">
@@ -97,6 +99,11 @@ export function LiveFeed() {
         {category && (
           <button onClick={() => setFilter('category', '')} className="rounded-md border border-line px-2 py-1.5 text-xs text-muted hover:text-fg">
             category: <span className="text-fg">{category}</span> ×
+          </button>
+        )}
+        {task && (
+          <button onClick={() => setFilter('task', '')} className="rounded-md border border-line px-2 py-1.5 text-xs text-muted hover:text-fg">
+            task: <span className="font-mono text-fg">{task}</span> ×
           </button>
         )}
         <label className="relative">

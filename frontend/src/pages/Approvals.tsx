@@ -1,11 +1,12 @@
 import clsx from 'clsx'
 import { useState } from 'react'
-import { LuCheck, LuKeyRound, LuUserCheck, LuX } from 'react-icons/lu'
+import { LuCheck, LuUserCheck, LuX } from 'react-icons/lu'
+import { AdminToken } from '../components/AdminToken'
 import { CountdownRing } from '../components/CountdownRing'
 import { Cmd, EmptyState } from '../components/EmptyState'
 import { JsonView } from '../components/JsonView'
 import { RiskMeter } from '../components/RiskMeter'
-import { ApiError, getAdminToken, setAdminToken } from '../lib/api'
+import { ApiError } from '../lib/api'
 import { clockTime, relative } from '../lib/format'
 import { useApprovals, useHealth, useResolveApproval } from '../lib/queries'
 import { useNow } from '../lib/useNow'
@@ -147,33 +148,4 @@ const OUTCOME: Record<ApprovalStatus, { label: string; className: string }> = {
 
 function Outcome({ status }: { status: ApprovalStatus }) {
   return <span className={clsx('text-sm font-medium', OUTCOME[status].className)}>{OUTCOME[status].label}</span>
-}
-
-/** Approve/deny need the admin token. Stored in this browser only; demo default is prefilled. */
-function AdminToken() {
-  const [value, setValue] = useState(getAdminToken)
-  const [saved, setSaved] = useState(false)
-  return (
-    <form
-      className="ml-auto flex items-center gap-2"
-      onSubmit={(e) => {
-        e.preventDefault()
-        setAdminToken(value)
-        setSaved(true)
-        setTimeout(() => setSaved(false), 1500)
-      }}
-    >
-      <LuKeyRound className="text-muted" aria-hidden />
-      <input
-        type="password"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        aria-label="Admin token"
-        className="w-36 rounded-md border border-line bg-surface px-2 py-1 font-mono text-xs focus:border-accent focus:outline-none"
-      />
-      <button type="submit" className="rounded-md border border-line px-2 py-1 text-xs text-muted hover:text-fg">
-        {saved ? 'Saved' : 'Save token'}
-      </button>
-    </form>
-  )
 }

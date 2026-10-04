@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, events, llm, mcp, prometheus
+from app.api import admin, demo, events, llm, mcp, prometheus
 from app.config import Settings, settings as default_settings
 from app.services import Services
 
@@ -50,6 +50,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(admin.router)
     app.include_router(prometheus.router)
+    app.include_router(demo.router)
     app.include_router(events.router)
     app.include_router(llm.router)
     app.include_router(mcp.router)

@@ -1,6 +1,8 @@
 # 04: Demo Script and Pitch (5 minutes)
 
 Setup on screen: **left** = terminal (`make demo`), **right** = dashboard Live Feed.
+No terminal? Every step below is also a *Run* button in the dashboard's **Attack Lab**, and each run links to its own
+filtered Live Feed (`/feed?task=…`).
 The demo agent is a "support-bot" for a small bank. It has tools: CRM, Email, Bank.
 
 ## 0:00–0:30 · Hook

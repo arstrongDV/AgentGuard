@@ -138,8 +138,8 @@ async def llm_judge(ctx: RequestContext, rt: Runtime) -> CheckResult:
         text = f"Tool call: {ctx.tool.name}({text})"
     try:
         verdict = await rt.ml.judge.ask(control.model, risk_name, text, control.timeout_s)
-    except JudgeUnavailable:
-        return CheckResult()  # degraded to the cheaper tiers; health shows why
+    except JudgeUnavailable as e:
+        return CheckResult(skipped_reason=f"judge unavailable: {e}")  # degraded to the cheaper tiers
     except TimeoutError as e:
         blocked = control.on_timeout == "block"
         return CheckResult(

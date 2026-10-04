@@ -273,7 +273,7 @@ def main() -> None:
     parser.add_argument("--scenario", default="demo", help="a scenario name, 'demo' (stage order) or 'all'")
     parser.add_argument("--mode", choices=["scripted", "llm"], default="scripted")
     parser.add_argument("--gateway", default=os.getenv("AGENTGUARD_URL", "http://localhost:8000"))
-    parser.add_argument("--model", default=os.getenv("DEMO_MODEL", "qwen2.5:7b"))
+    parser.add_argument("--model", default=os.getenv("AGENT_MODEL", os.getenv("DEMO_MODEL", "qwen2.5:3b")))
     parser.add_argument("--max-steps", type=int, default=8)
     parser.add_argument("--auto-approve", choices=["approve", "deny"], help="resolve approvals automatically (unattended runs)")
     parser.add_argument("--admin-token", default=os.getenv("ADMIN_TOKEN", "dev-admin"))

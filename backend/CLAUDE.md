@@ -52,6 +52,7 @@ app/
   checks/semantic.py T2/T3 checks + their gates, output tool-call check
   providers/auto.py  Ollama when reachable, mock LLM otherwise (the default, LLM_PROVIDER=auto)
   api/prometheus.py  GET /metrics
+  demo_runs.py       Attack Lab runner (drives demo/agent.py against SELF_URL); api/demo.py endpoints
 scripts/             download_models.py, bench.py
 Dockerfile           gateway + mock MCP image (build context = repo root; model baked in)
 demo/

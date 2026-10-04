@@ -9,6 +9,7 @@ import {
   LuLayoutDashboard,
   LuShieldCheck,
   LuSlidersHorizontal,
+  LuSwords,
   LuUserCheck,
   LuWifiOff,
   LuX,
@@ -27,6 +28,7 @@ const NAV: { to: string; label: string; icon: IconType }[] = [
   { to: '/budgets', label: 'Budgets', icon: LuGauge },
   { to: '/policy', label: 'Policy', icon: LuSlidersHorizontal },
   { to: '/audit', label: 'Audit', icon: LuFileDown },
+  { to: '/lab', label: 'Attack Lab', icon: LuSwords },
 ]
 
 export function Layout() {

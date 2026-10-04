@@ -2,7 +2,7 @@
 
 **Status (2026-10-04): all steps are implemented**, including the semantic layer (step 8), Prometheus, `make bench` and
 Docker packaging (step 11), verified: `docker compose up`, every demo scenario against the containers, hot reload
-from a host edit, 157 tests inside the image. 157 tests pass offline. Remaining ideas, not planned: Redis StateStore, token-by-token
+from a host edit, 166 tests inside the image. 166 tests pass offline. Remaining ideas, not planned: Redis StateStore, token-by-token
 streaming scans, Presidio NER. Earlier notes: Implementation notes that differ from the original plan:
 - Audit store uses stdlib `sqlite3` behind a lock instead of `aiosqlite` (sub-millisecond writes, one less dependency).
 - SSE is a plain `StreamingResponse`; `sse-starlette` is not needed.

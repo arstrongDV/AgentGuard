@@ -49,19 +49,19 @@ a fixtures file and never waits on the backend.
 - [x] Output checks: markdown-image exfil links, indirect injection inside tool results
 - **Demo-able:** a judge edits YAML live and the behaviour changes within a second.
 
-### Phase 4: Reporting and proof (h 30–40) · SHOULD
+### Phase 4: Reporting and proof (h 30–40) · SHOULD · ✅ done
 - [x] Metrics endpoint: counts, block/redact %, top categories, p50/p95 per check, % of requests that reached T2/T3
-- [ ] Overview, Budgets, Policy, Audit pages complete; CSV/JSONL export
+- [x] Overview, Budgets, Policy, Audit pages complete; CSV/JSONL export
 - [x] 50+ test cases; budget + hot-reload + MCP tests; `make test` green offline
-- [x] `docker-compose.yml`, `Makefile`, `make seed` · [ ] architecture diagram PNG · [ ] compose verified end to end on a clean machine
+- [x] `docker-compose.yml`, `Makefile`, `make seed`, architecture diagram PNG (`docs/images/architecture.png`), compose verified from a clean copy
 - [x] Benchmark script: `make bench` → latency table pasted into the README
 
 ### Phase 5: Polish and pitch (h 40–48) · MUST
 - [x] `make demo` runs the 3 attacks with nice terminal output
-- [ ] README: 3-minute quick start, screenshots/GIF, architecture, scoring map, limitations, licenses
+- [x] README: 3-minute quick start, screenshots/GIF, architecture, scoring map, limitations, licenses
 - [ ] Clean-machine test: fresh clone → `docker compose up` → `make test` (a teammate who did not build it does this)
 - [ ] Rehearse the pitch twice with a timer ([04-demo-script.md](04-demo-script.md))
-- [ ] Stretch: Attack Lab page (run scenarios from the UI), [x] Prometheus `/metrics`, Redis StateStore
+- [x] Stretch: Attack Lab page (run scenarios from the UI), Prometheus `/metrics` · [ ] Redis StateStore (documented, not built)
 
 ## Cut lines (drop in this order if late)
 

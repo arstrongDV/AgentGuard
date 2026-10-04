@@ -7,9 +7,9 @@ they talk to: the language model and the tools (MCP servers). It inspects every 
 and tool result, enforces a policy, and shows every decision live in a security dashboard.
 Integration is one line: change the agent's `base_url`.
 
-> **Status:** Hackathon 2026. The gateway, MCP proxy, all four detection tiers, demo agent and Docker setup are built
-> (157 offline tests). Dashboard: Live Feed and Approvals are built; Overview, Budgets, Policy and Audit pages are next.
-> Progress: [docs/03-roadmap.md](docs/03-roadmap.md).
+Built for Hackathon 2026: runs entirely locally (`docker compose up`), no paid APIs, 166 offline tests.
+
+![AgentGuard dashboard: Overview](docs/images/overview.png)
 
 ---
 
@@ -47,22 +47,7 @@ AgentGuard adds **two control points that share one policy and one check pipelin
 
 ## How it works
 
-```mermaid
-flowchart LR
-  Agent[AI agent<br/>OpenAI SDK + MCP client] -->|/v1/chat/completions| GW
-  Agent -->|/mcp/server| GW
-  subgraph GW[AgentGuard gateway: FastAPI]
-    P[[Check pipeline]]
-    Pol[(policy.yaml<br/>hot-reloaded)]
-    Sig[(signatures.json<br/>attack feed)]
-    Aud[(Audit log<br/>SQLite + JSONL)]
-  end
-  P --> Pol & Sig
-  GW -->|forward| LLM[Ollama<br/>local LLM]
-  GW -->|forward| Tools[MCP servers<br/>CRM · Email · Bank]
-  Aud -->|SSE live feed| UI[React dashboard]
-  UI -->|policy switches, approvals| GW
-```
+![Architecture](docs/images/architecture.png)
 
 Every request and every response goes through the same pipeline:
 
@@ -130,12 +115,19 @@ agents:
 Full schema: [backend/docs/policy-schema.md](backend/docs/policy-schema.md).
 
 ### Dashboard
-- **Overview**: requests, % blocked / redacted, top threat categories, p50/p95 latency per check.
-- **Live feed**: every event as it happens. Click one to see the rule that fired, the score, the original vs redacted text, and a timeline of the checks.
+- **Overview**: requests, % blocked / redacted, decisions over time, top threat categories, latency per check by tier, and how much traffic needed the ML model.
+- **Live feed**: every event as it happens. Click one to see the rule that fired, the score, the original vs redacted text, and a timeline of the checks (including which ones were skipped, and why).
 - **Approvals**: pending tool calls with a countdown, plus Approve / Deny.
-- **Budgets**: spend per agent and per model against limits.
-- **Policy**: mode and strictness switches. Changes are written to `policy.yaml`, which stays the single source of truth.
-- **Audit export**: CSV / JSONL download for security teams.
+- **Budgets**: token and cost spend per agent and per model against limits, rate limit, blocks today.
+- **Policy**: mode, strictness (global and per agent), thresholds and switches. Every change is written to `policy.yaml` (comments kept) and the changed lines light up in the live file view.
+- **Audit export**: filters plus CSV / JSONL download, or the same export as an API URL for a SIEM.
+- **Attack Lab**: run every attack scenario from the browser and watch it in the Live Feed; the transfer scenario waits for *you* on the Approvals page.
+
+| Live feed with event details | Policy, written back to the file |
+|---|---|
+| ![Live feed](docs/images/live-feed.png) | ![Policy](docs/images/policy.png) |
+| **Attack Lab** | **Human approval** |
+| ![Attack Lab](docs/images/attack-lab.png) | ![Approvals](docs/images/approvals.png) |
 
 ## Integration: one line
 
@@ -155,21 +147,107 @@ For tools, point the MCP client at `http://localhost:8000/mcp/<server>` with hea
 | **PII leak in the output** | "Give me all details for customer Anna" | Output redaction: `[EMAIL_1]`, `[IBAN_1]` |
 | **Runaway loop** | The agent repeats the same tool call | Loop detection, then the budget limit |
 
+All of them (plus exfiltration by email, attacks in tool arguments, and an injection against an agent that *can* move
+money) are one click away in the dashboard's **Attack Lab**, or `make demo` in a terminal.
 Full script: [docs/04-demo-script.md](docs/04-demo-script.md).
 
-## Quick start
+## Quick start (Docker)
 
-**With Docker (no paid APIs, everything local):**
+Everything runs locally in Docker: no paid APIs, no accounts, no Python or Node on your machine.
+
+### 1. Requirements
+
+- **Docker** with Compose v2 (`docker compose version` works): Docker Desktop on macOS / Windows, or Docker Engine on Linux.
+- **~4 GB of free disk** and **~4 GB of memory for Docker** (Docker Desktop → Settings → Resources).
+- Free ports **8000** (gateway), **9001–9003** (mock tool servers) and **5173** (dashboard; can be changed, see step 3).
+- `make` is optional: every `make` target below has the plain `docker compose` command next to it.
+
+### 2. Get the code
+
 ```bash
-docker compose up                      # gateway :8000, mock MCP servers :9001-9003, dashboard http://localhost:5173
-docker compose --profile ollama up     # ...plus Ollama with qwen2.5:7b + granite3-guardian:2b (first run pulls ~6 GB)
-make seed                              # (needs `make install` for the demo agent) fill the dashboard with every scenario
-make test-docker                       # the test suite inside the image
+git clone <repository-url> AgentGuard
+cd AgentGuard
 ```
-Without the `ollama` profile the gateway answers with a built-in mock LLM (`/health` and the dashboard say so), so the
-whole demo works offline. The prompt-injection model is baked into the image and hash-checked on load.
 
-**Without Docker (four terminals):**
+### 3. Build and start
+
+```bash
+docker compose up -d --build        # or: make up   (same thing, in the foreground)
+```
+
+This builds two images and starts three containers:
+
+| Container | Port | What it is |
+|---|---|---|
+| `gateway` | 8000 | AgentGuard itself: LLM gateway, MCP proxy, all checks, audit log, dashboard API |
+| `mcp` | 9001–9003 | mock CRM, Email and Bank tool servers (fake data, nothing is really sent) |
+| `dashboard` | 5173 | the React dashboard, served by nginx |
+
+- The **first build takes a few minutes**: it installs the Python packages and downloads the prompt-injection model
+  (~740 MB) into the image. Later starts take seconds.
+- Port 5173 already in use? Start with another one: `DASHBOARD_PORT=5180 docker compose up -d --build`
+  (or put `DASHBOARD_PORT=5180` in a `.env` file, see [.env.example](.env.example)).
+
+### 4. Check that it is ready
+
+```bash
+docker compose ps                    # gateway and mcp should say "(healthy)"
+curl -s localhost:8000/health        # "status":"ok" and "ml":"loaded" (the model loads ~5-20 s after start)
+```
+
+### 5. Open the dashboard
+
+**http://localhost:5173** (or your `DASHBOARD_PORT`) → **Attack Lab** → press **Run** on any scenario.
+The admin token `dev-admin` is prefilled. Then look at **Live Feed** to see every decision and why it was made.
+
+The status bar says **LLM mock**: by default the gateway answers with a built-in mock LLM (`Echo: …`). Every
+guardrail, the ML classifier, approvals, budgets and the Attack Lab are real; only the language model is simulated.
+Step 7 adds a real one.
+
+What each page shows: **[The app: a tour](#the-app-a-tour)** below. A guided test with inputs and expected results:
+**[docs/06-testing-guide.md](docs/06-testing-guide.md)**.
+
+### 6. Everyday commands
+
+| Task | Command | `make` |
+|---|---|---|
+| Follow the gateway logs | `docker compose logs -f gateway` | `make logs` |
+| Run the test suite inside the image | `docker run --rm agentguard-backend pytest` | `make test-docker` |
+| Rebuild after changing code | `docker compose up -d --build` | `make up` |
+| Stop everything | `docker compose --profile llm down` | `make down` |
+| Stop **and delete the audit log** (start clean) | `docker compose --profile llm down -v` | |
+| Undo policy changes made in the dashboard | `git checkout policy.yaml` | |
+
+`policy.yaml` in this folder is mounted into the gateway: editing it (in your editor or on the dashboard's Policy page)
+takes effect within about a second, without a restart.
+
+### 7. Optional: a real local LLM (Ollama)
+
+| Your machine | Command | What you get |
+|---|---|---|
+| **Mac** (any) | install the [Ollama app](https://ollama.com/download), run `ollama pull qwen2.5:3b && ollama pull granite3-guardian:2b`, then `OLLAMA_URL=http://host.docker.internal:11434 docker compose up -d --build` (`make up-host-ollama`) | real LLM + LLM judge on the Apple GPU, the rest in Docker: **the fastest option on a Mac** |
+| **≥ 16 GB RAM**, Docker memory ≥ 8 GB | `docker compose --profile llm up -d --build` (`make up-llm`) | Ollama inside Docker (CPU). First run downloads a ~7 GB image + ~4.6 GB of models; until they are ready the mock answers |
+| **Linux / WSL2 with an NVIDIA GPU** | `docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile llm up -d --build` (`make up-gpu`) | Ollama inside Docker on the GPU |
+
+Pick the models with `AGENT_MODEL` (default `qwen2.5:3b`; `qwen2.5:7b` is smarter and needs ~8 GB) and `JUDGE_MODEL`
+in `.env`. When it works, the status bar shows **LLM ollama** and **Judge on**.
+
+Measured on an 8 GB M3 MacBook (Docker VM 4 GB, CPU only): Ollama *inside* Docker works but swaps (~1–4 tokens/s, the
+judge needs 17–43 s per verdict, so it times out and the policy's `on_timeout` applies). Use the Ollama app on the host there.
+
+### 8. Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `port is already allocated` | another program uses the port: change `DASHBOARD_PORT`, or stop whatever uses 8000 / 9001–9003 |
+| Dashboard says **Gateway offline** | the gateway is still starting: wait until `docker compose ps` shows `(healthy)` |
+| Status bar **ML loading** | the classifier is loading (up to ~20 s on a slow machine); rules already protect traffic meanwhile |
+| Attack Lab: *Run failed: … ConnectError* | the `mcp` container is not running: `docker compose up -d` |
+| Real LLM answers take minutes / `JUDGE-TIMEOUT` | Ollama inside Docker without enough memory or GPU: give Docker more memory, or use the host Ollama app |
+| Changed code but nothing changed | rebuild: `docker compose up -d --build` |
+| Windows without `make` | use the `docker compose …` commands from the tables above (WSL2 recommended) |
+
+### Without Docker (four terminals)
 ```bash
 make install             # backend venv (+ ML) + frontend packages
 make models              # prompt-injection classifier, ~740 MB (optional: without it the gateway runs rules-only)
@@ -180,7 +258,7 @@ make demo                # normal run + 3 attacks, with every AgentGuard decisio
 make demo-live           # finance-bot tries a transfer: approve or deny it on the Approvals page
 ```
 
-**Development setup (works today):**
+### Development setup
 ```bash
 # backend: http://localhost:8000 (OpenAPI docs at /docs)
 cd backend
@@ -188,7 +266,7 @@ python3 -m venv venv && source venv/bin/activate
 pip install -r requirements-dev.txt -r requirements-ml.txt
 cp .env.example .env
 uvicorn app.main:app --reload --port 8000     # LLM_PROVIDER=auto (default) falls back to a mock LLM without Ollama
-pytest                                        # 157 tests, offline
+pytest                                        # 166 tests, offline
 
 # frontend: http://localhost:5173
 cd frontend
@@ -197,7 +275,8 @@ cp .env.example .env
 npm run dev
 ```
 
-**Try it** (gateway running with `LLM_PROVIDER=mock`):
+### Try it from a terminal
+
 ```bash
 curl -s localhost:8000/v1/chat/completions -H 'Authorization: Bearer ag-support-demo-key' \
   -H 'content-type: application/json' \
@@ -206,6 +285,31 @@ curl -s localhost:8000/v1/chat/completions -H 'Authorization: Bearer ag-support-
 curl -s 'localhost:8000/api/events?limit=5'   # the audit trail
 ```
 Demo agent keys: `ag-support-demo-key`, `ag-finance-demo-key`. Admin token for dashboard writes: `dev-admin`.
+
+## The app: a tour
+
+The dashboard is the security console for everything AgentGuard sees. In the demo, two AI agents of a small
+bank, **support-bot** (customer support: may search the CRM and email colleagues) and **finance-bot** (back office:
+may check balances and, with a human's approval, transfer money), talk to an LLM and to three tool servers (CRM,
+Email, Bank) **through** AgentGuard. The customers, accounts and files are invented; emails and transfers are never
+really sent (see http://localhost:9002/outbox and http://localhost:9003/ledger).
+
+**Status bar (top of every page):** gateway online/offline · which LLM answers (`mock` or `ollama`) · whether the ML
+classifier is loaded · whether the LLM judge is on · number of attack signatures · active policy version ·
+**ENFORCE** (blocking) or **MONITOR** (log only) · `live` = the event stream is connected.
+
+| Page | What you see | Try this |
+|---|---|---|
+| **Overview** | Requests, % blocked and redacted, decisions over time (allow / redact / block per minute), top threat categories, and the latency of every check grouped by tier with how much traffic each tier saw | Notice *Needed the ML model*: most traffic is decided by rules in well under a millisecond; click a category to jump to those events |
+| **Live Feed** | Every prompt, model answer, tool call and tool result as it happens, with its decision, risk and overhead. Click a row: **Why** (the rules that fired), **Content** (the original next to what was actually forwarded, e.g. `anna@…` → `[EMAIL_1]`), **Pipeline** (each check's time, and why skipped checks were skipped) | Filter by agent / decision / channel, search for a rule id (`/` focuses search), **Pause** while explaining an event |
+| **Approvals** | Tool calls that need a human (e.g. finance-bot's `transfer_money`) with their arguments, risk and a 60-second countdown | **Approve** or **Deny**; with no decision the policy's `on_timeout` (deny) applies. History below |
+| **Budgets** | Per agent: tokens and cost used today against the daily limit (local models are priced at a "virtual" cloud-equivalent rate), requests in the last minute, blocks today | Run the loop scenario and watch the request meter and the block counter |
+| **Policy** | Mode, strictness (global and per agent), injection threshold, LLM judge, PII handling, … next to the live `policy.yaml`. Every switch writes the file and the changed line lights up | Set support-bot to **High**, see the effective values change; set it back to **Inherit** |
+| **Audit** | The audit log with filters (time, agent, decision, channel, category) | **Download CSV / JSONL**, or copy the export URL for a SIEM |
+| **Attack Lab** | Seven attack scenarios as cards: each step shows the expected and the actual decision | Press **Run**; the money-transfer scenario waits for you on **Approvals**; *Open in Live Feed* shows only that run |
+
+The decision colors are the same everywhere: **green = allow**, **amber = redact** (let through with sensitive parts
+hidden), **violet = waiting for approval**, **red = block**, and a **dashed** badge = *would have* blocked (monitor mode).
 
 ## Tech stack
 
@@ -226,7 +330,7 @@ All models run locally; no paid APIs are used.
 |---|---|---|
 | `protectai/deberta-v3-base-prompt-injection-v2` | prompt-injection classifier | Apache-2.0 |
 | `granite3-guardian` | LLM judge | Apache-2.0 |
-| `qwen2.5:7b` | demo agent model | Apache-2.0 |
+| `qwen2.5:3b` (default) / `qwen2.5:7b` | agent model | Apache-2.0 |
 | `llama3.1:8b` (optional) | demo agent model | Llama 3.1 Community License |
 | Llama Guard 3 (optional alternative judge) | LLM judge | Llama Community License (not Apache/MIT) |
 
@@ -258,7 +362,7 @@ Positive and negative cases are written in YAML and run with parametrized pytest
   input: "Contact me at anna.schmidt@example.com"
   expect: { decision: redact, rules: [PII-EMAIL], not_contains: "anna.schmidt@example.com" }
 ```
-The suite (157 tests) covers PII, secrets, every signature category, injection, tool ACLs, approvals, budgets, loop
+The suite (166 tests) covers PII, secrets, every signature category, injection, tool ACLs, approvals, budgets, loop
 detection, monitor mode, hot reload, the ML and judge gates, the remote feed, and every demo scenario end to end against
 the real mock MCP servers. It needs no network, Ollama or GPU. Details: [backend/docs/testing.md](backend/docs/testing.md).
 
@@ -272,11 +376,13 @@ the real mock MCP servers. It needs no network, Ollama or GPU. Details: [backend
 ## Project structure
 
 ```
-backend/            FastAPI gateway, MCP proxy, checks, audit, demo agent, mock MCP servers, tests
-frontend/           React security dashboard
+backend/            FastAPI gateway, MCP proxy, checks, ML tiers, audit, demo agent, mock MCP servers, tests
+frontend/           React security dashboard (7 pages)
 policy.yaml         the policy (hot-reloaded)
 feeds/              attack signature feed
-docs/               vision, architecture, roadmap, demo script, judging map
+docs/               vision, architecture, roadmap, demo script, judging map, screenshots
+docker-compose.yml  gateway + mock MCP servers + dashboard (+ Ollama profile)
+Makefile            `make help` lists every task
 ```
 
 ## Documentation
@@ -295,9 +401,10 @@ docs/               vision, architecture, roadmap, demo script, judging map
 - The injection classifier scores raw JSON as an injection and over-scores harmless sentences containing "ignore" (e.g. "ignore the typo"). AgentGuard
   only feeds it prose (sentences inside tool results) and only sends prompts to it when a rule raised the risk first. `strictness: high` sends
   everything to the model, and accepts more false positives in return.
-- The LLM judge needs Ollama (`--profile ollama`); without it, the judge is skipped and the timeline says why.
+- The LLM judge needs Ollama; without it (or when it is too slow) the judge is skipped or times out, and the timeline says which.
+- Ollama in Docker runs on the CPU only on a Mac (Docker cannot use the Apple GPU): slow on small machines, see the table above.
 - Detection is never perfect. That is why AgentGuard layers its defences and offers monitor mode for tuning thresholds before enforcing them.
 
 ## License
 
-To be decided by the team (MIT is suggested).
+[MIT](LICENSE). Third-party models keep their own licenses (see [Models and licenses](#models-and-licenses)).

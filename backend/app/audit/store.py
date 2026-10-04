@@ -69,6 +69,8 @@ class AuditStore:
         agent: str | None = None,
         decision: str | None = None,
         category: str | None = None,
+        channel: str | None = None,
+        task: str | None = None,
         ascending: bool = False,
     ) -> list[AuditEvent]:
         where, params = [], []
@@ -93,6 +95,12 @@ class AuditStore:
         if category:
             where.append("categories LIKE ?")
             params.append(f"%,{category},%")
+        if channel:
+            where.append("channel = ?")
+            params.append(channel)
+        if task:
+            where.append("json_extract(payload, '$.task_id') = ?")
+            params.append(task)
         sql = "SELECT payload FROM events"
         if where:
             sql += " WHERE " + " AND ".join(where)
@@ -102,11 +110,11 @@ class AuditStore:
             rows = self._db.execute(sql, params).fetchall()
         return [AuditEvent.model_validate_json(r[0]) for r in rows]
 
-    def iterate(self, *, since: str | None, until: str | None, agent: str | None, batch: int = 500) -> Iterator[AuditEvent]:
-        """Oldest first, in batches, for streaming exports."""
+    def iterate(self, *, batch: int = 500, **filters: str | None) -> Iterator[AuditEvent]:
+        """Oldest first, in batches, for streaming exports. Filters as in query()."""
         cursor = None
         while True:
-            rows = self.query(limit=batch, after_id=cursor, since=since, until=until, agent=agent, ascending=True)
+            rows = self.query(limit=batch, after_id=cursor, ascending=True, **filters)
             yield from rows
             if len(rows) < batch:
                 return

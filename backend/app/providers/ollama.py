@@ -25,7 +25,7 @@ class OllamaProvider:
         except httpx.HTTPError as e:
             raise UpstreamError(f"Ollama unreachable at {self.base_url}: {e.__class__.__name__}") from e
         if resp.status_code >= 400:
-            raise UpstreamError(f"Ollama returned {resp.status_code}: {resp.text[:300]}")
+            raise UpstreamError(f"Ollama returned {resp.status_code}: {resp.text[:300]}", status=resp.status_code)
         return resp.json()
 
     async def status(self) -> str:

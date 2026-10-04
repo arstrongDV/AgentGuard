@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from time import perf_counter
 
 from app.core.context import RequestContext
-from app.core.decision import CheckResult, CheckTiming, Decision, Finding, combine, risk_score
+from app.core.decision import SEVERITY_WEIGHT, CheckResult, CheckTiming, Decision, Finding, combine, risk_score
 from app.core.text import joined
 from app.ml import MLRuntime
 from app.policy.feed import SignatureFeed, Stage
@@ -90,7 +90,11 @@ async def run_pipeline(ctx: RequestContext, rt: Runtime, checks: list[Check]) ->
             result = CheckResult(
                 findings=[Finding(check=check.name, rule_id="CHECK-ERROR", category="internal", severity="low", score=0.0, message=str(e))]
             )
-        ctx.timings.append(CheckTiming(check=check.name, tier=check.tier, ms=round((perf_counter() - t0) * 1000, 3)))
+        elapsed = round((perf_counter() - t0) * 1000, 3)
+        if result.skipped_reason is not None:
+            ctx.timings.append(CheckTiming(check=check.name, tier=check.tier, ms=0.0, skipped_reason=result.skipped_reason))
+            continue
+        ctx.timings.append(CheckTiming(check=check.name, tier=check.tier, ms=elapsed))
 
         ctx.findings.extend(result.findings)
         for index, text in result.replacements.items():
@@ -98,7 +102,8 @@ async def run_pipeline(ctx: RequestContext, rt: Runtime, checks: list[Check]) ->
             redacted = True
         if result.decision in (Decision.block, Decision.needs_approval) and result.findings:
             if blocking is None or (result.decision == Decision.block and decision != Decision.block):
-                blocking = result.findings[0]
+                # report the finding that explains the decision: the most severe one, not merely the first
+                blocking = max(result.findings, key=lambda f: (SEVERITY_WEIGHT[f.severity], f.score))
         decision = combine(decision, result.decision)
         if decision == Decision.block and blocked_tier is None:
             blocked_tier = check.tier
