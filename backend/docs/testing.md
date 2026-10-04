@@ -51,6 +51,11 @@ print a summary (`52 cases: 18 allow · 21 block · 9 redact · 4 needs_approval
 
 ## Non-YAML tests
 
+As built (154 tests, ~7 s): `test_controls.py` (75 YAML cases), `test_api.py`, `test_mcp_proxy.py`, `test_attacks.py`
+(every demo scenario against the real mock MCP servers), `test_semantic.py` (T2/T3 gates with fake models, judge client,
+remote feed, `${ENV}` policy, auto provider, Prometheus, one real-model test skipped without `make models`),
+`test_hot_reload.py`, `test_state.py`.
+
 - `test_budget.py`: token limit, usd limit, rate limit, task tool-call limit, day rollover.
 - `test_loop.py`: same call ×N → block; different args → no block; window expiry.
 - `test_hot_reload.py`: write a new policy to a temp file → within 2 s the decision changes; invalid YAML → old policy kept + `policy_error`.

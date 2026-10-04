@@ -62,6 +62,16 @@ agents:
 > The real `policy.yaml` uses **block style** (one key per line) rather than the compact inline maps above:
 > `ruamel.yaml` round-trips block style byte for byte, so a dashboard edit changes only the lines it touches.
 
+### Added while building
+
+- `controls.output_tool_calls.action: block | allow`: tool calls proposed by the model, checked against the agent's tools.
+- `controls.signatures.url`: optional remote feed (http/https), polled every `refresh_s` with ETag; while set it replaces the
+  file feed. A broken remote feed never replaces a working one (`policy_error` event instead).
+- `${VAR}` and `${VAR:-default}` are expanded when the policy is loaded (e.g. `http://${MCP_HOST:-localhost}:9001/mcp`);
+  dashboard edits keep the placeholders.
+- `supply_chain.pinned.<hf repo>.sha256`: the classifier refuses to load a model file with a different hash.
+- Strictness set on an agent overrides the global control values (threshold, gate, loop limit, PII in answers).
+
 ### PII actions per direction
 
 | Stage | Setting | Default |

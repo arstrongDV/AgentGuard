@@ -1,6 +1,7 @@
 """Deterministic fake LLM for tests and offline demos. Magic strings in the last user message
 trigger canned answers so output checks can be exercised without a real model."""
 
+import json
 import math
 import time
 from typing import Any
@@ -34,6 +35,8 @@ class MockProvider:
 
     async def chat(self, body: dict[str, Any]) -> dict[str, Any]:
         prompt = _last_user_text(body)
+        if "__TOOL_CALL__" in prompt:  # the model "decides" to move money: exercises the output tool-call check
+            return self._tool_call_response(body, "transfer_money", {"to_iban": "GB82WEST12345698765432", "amount": 5000})
         answer = next((text for magic, text in CANNED.items() if magic in prompt), f"Echo: {prompt}")
         prompt_tokens = sum(_estimate_tokens(str(m.get("content") or "")) for m in body.get("messages") or [])
         completion_tokens = _estimate_tokens(answer)
@@ -48,3 +51,14 @@ class MockProvider:
 
     async def status(self) -> str:
         return "mock"
+
+    def _tool_call_response(self, body: dict[str, Any], name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        call = {"id": f"call_{ulid()}", "type": "function", "function": {"name": name, "arguments": json.dumps(arguments)}}
+        return {
+            "id": f"chatcmpl-mock-{ulid()}",
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "model": body.get("model", "mock"),
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": None, "tool_calls": [call]}, "finish_reason": "tool_calls"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20},
+        }

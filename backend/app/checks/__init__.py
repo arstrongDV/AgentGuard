@@ -1,12 +1,11 @@
-"""Check registry. Order matters: cheap gates (T0) first, then deterministic rules (T1).
-
-T2 (injection classifier) and T3 (LLM judge) plug in here later, gated by risk.
-"""
+"""Check registry. Order matters: cheap gates (T0) first, then deterministic rules (T1), then the
+semantic tiers (T2 classifier, T3 judge), which only run when their gate lets them."""
 
 from app.checks.budget import budget, loop_detection, rate_limit, task_tool_calls
 from app.checks.gates import model_allowlist, tool_acl
 from app.checks.pii import pii
 from app.checks.secrets import secrets
+from app.checks.semantic import injection, injection_gate, judge_gate, llm_judge, output_tool_calls
 from app.checks.signatures import banned_topics, signatures
 from app.core.pipeline import Check
 
@@ -26,4 +25,9 @@ CHECKS: list[Check] = [
     Check("secrets", 1, ALL, secrets),
     Check("pii", 1, ALL, pii),
     Check("banned_topics", 1, frozenset({"llm_in", "llm_out"}), banned_topics),
+    Check("output_tool_calls", 1, frozenset({"llm_out"}), output_tool_calls),
+    # T2: ML classifier (gated by risk; always on tool results)
+    Check("injection", 2, frozenset({"llm_in", "mcp_result"}), injection, gate=injection_gate),
+    # T3: LLM judge (gated: uncertain band or high-risk tool calls)
+    Check("llm_judge", 3, ALL, llm_judge, gate=judge_gate),
 ]

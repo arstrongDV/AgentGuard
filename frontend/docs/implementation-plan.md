@@ -1,6 +1,8 @@
 # Frontend Implementation Plan
 
-Current state: the Vite starter (`App.tsx` with a hero/counter and a `/health` ping). React 19, TS 6, Vite 8, oxlint.
+**Status (2026-10-04): steps 1–4 are built** (shell, data layer, Live Feed with drawer, Approvals), checked in a real
+browser against the running stack (Playwright screenshots, clean console). Not built yet: fixtures / `VITE_USE_FIXTURES`
+(the mock-LLM backend made them unnecessary so far), steps 5–9. Overview, Budgets, Policy and Audit routes show a placeholder.
 
 The guiding idea: **the dashboard is the demo.** Judges spend most of the pitch looking at it, so it gets
 real design effort, and it must look alive even before the backend is finished (fixtures).

@@ -86,6 +86,10 @@
     { "id": "INJ-MONEY-DIRECTIVE", "category": "prompt_injection", "severity": "medium", "applies_to": ["mcp_result"], "action": "allow",
       "pattern": "\\b(transfer|wire|send)\\s+(\\d[\\d,.]*\\s*(eur|usd|gbp|€|\\$)|(eur|usd|gbp|€|\\$)\\s*\\d)", "description": "Money-movement instruction inside a tool result" },
 
+    { "id": "INJ-SUSPICIOUS-WORDING", "category": "prompt_injection", "severity": "low", "applies_to": ["llm_in"], "action": "allow",
+      "pattern": "\\b(disregard|override|bypass|jailbreak|no longer apply|from now on|you are now|pretend (to be|you)|act as|roleplay|system prompt|hidden (instructions|configuration)|new rules|forget (everything|all|your))\\b",
+      "description": "Wording common in injection attempts: not blocked, but escalated to the ML classifier" },
+
     { "id": "JB-DAN", "category": "jailbreak", "severity": "critical", "applies_to": ["llm_in", "mcp_result"],
       "pattern": "\\bdo anything now\\b|\\bDAN mode\\b|\\byou are (now )?DAN\\b", "description": "DAN jailbreak template" },
     { "id": "JB-SPECIAL-MODE", "category": "jailbreak", "severity": "high", "applies_to": ["llm_in", "mcp_result"],

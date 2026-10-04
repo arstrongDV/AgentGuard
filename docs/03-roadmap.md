@@ -20,7 +20,7 @@ a fixtures file and never waits on the backend.
 
 ## Phases
 
-### Phase 1: Core gateway (h 0–8) · MUST
+### Phase 1: Core gateway (h 0–8) · MUST · backend ✅ done
 - [ ] `policy.yaml` + pydantic schema + loader (no hot reload yet)
 - [ ] `/v1/chat/completions` proxy to Ollama (non-stream) + mock provider
 - [ ] API-key → agent identity
@@ -31,37 +31,37 @@ a fixtures file and never waits on the backend.
 - [ ] Frontend: shell, router, `types/api.ts`, Live Feed against fixtures
 - **Demo-able:** curl a prompt with an email → it gets redacted, and the event shows up in the feed.
 
-### Phase 2: Agents and tools (h 8–18) · MUST
-- [ ] Mock MCP servers: CRM (`search_customers`, `get_customer`), Email (`send_email`), Bank (`get_balance`, `transfer_money`)
-- [ ] MCP proxy: `initialize`, `tools/list` (filtered), `tools/call` (ACL + args checks + result checks)
-- [ ] Approval queue for `tools_need_approval` (hold the call, approve from the API)
-- [ ] Budgets: tokens/day, $/day with a virtual-cost table, rate limit, max tool calls per task, loop detection
-- [ ] Demo agent with the 4 scenarios (benign, injection, pii_leak, runaway_loop)
-- [ ] SSE `/api/events/stream`; frontend Live Feed goes live; Approvals page
+### Phase 2: Agents and tools (h 8–18) · MUST · ✅ done
+- [x] Mock MCP servers: CRM (`search_customers`, `get_customer`), Email (`send_email`), Bank (`get_balance`, `transfer_money`)
+- [x] MCP proxy: `initialize`, `tools/list` (filtered), `tools/call` (ACL + args checks + result checks)
+- [x] Approval queue for `tools_need_approval` (hold the call, approve from the API)
+- [x] Budgets: tokens/day, $/day with a virtual-cost table, rate limit, max tool calls per task, loop detection
+- [x] Demo agent with the 4 scenarios (benign, injection, pii_leak, runaway_loop)
+- [x] SSE `/api/events/stream`; frontend Live Feed goes live; Approvals page
 - **Demo-able:** all 3 attacks stopped, visible live.
 
-### Phase 3: Smart layer (h 18–30) · SHOULD
-- [ ] Signatures feed (`feeds/signatures.json`, file or URL, refresh every N s), covering all categories from the brief
-- [ ] DeBERTa injection classifier (ONNX, lazy load, gated by risk)
-- [ ] LLM judge via Ollama Granite Guardian (gated)
-- [ ] Hot reload with watchfiles + `policy_reloaded` event; `PATCH /api/policy`
-- [ ] Strictness presets low/medium/high; `mode: monitor | enforce`
-- [ ] Output checks: markdown-image exfil links, indirect injection inside tool results
+### Phase 3: Smart layer (h 18–30) · SHOULD · ✅ done
+- [x] Signatures feed (`feeds/signatures.json`, file or URL, refresh every N s), covering all categories from the brief
+- [x] DeBERTa injection classifier (ONNX, lazy load, gated by risk)
+- [x] LLM judge via Ollama Granite Guardian (gated)
+- [x] Hot reload with watchfiles + `policy_reloaded` event; `PATCH /api/policy`
+- [x] Strictness presets low/medium/high; `mode: monitor | enforce`
+- [x] Output checks: markdown-image exfil links, indirect injection inside tool results
 - **Demo-able:** a judge edits YAML live and the behaviour changes within a second.
 
 ### Phase 4: Reporting and proof (h 30–40) · SHOULD
-- [ ] Metrics endpoint: counts, block/redact %, top categories, p50/p95 per check, % of requests that reached T2/T3
+- [x] Metrics endpoint: counts, block/redact %, top categories, p50/p95 per check, % of requests that reached T2/T3
 - [ ] Overview, Budgets, Policy, Audit pages complete; CSV/JSONL export
-- [ ] 50+ test cases; budget + hot-reload + MCP tests; `make test` green offline
-- [ ] `docker-compose.yml`, `Makefile`, seeded data, architecture diagram (PNG exported from mermaid)
-- [ ] Benchmark script: `make bench` → latency table pasted into the README
+- [x] 50+ test cases; budget + hot-reload + MCP tests; `make test` green offline
+- [x] `docker-compose.yml`, `Makefile`, `make seed` · [ ] architecture diagram PNG · [ ] compose verified end to end on a clean machine
+- [x] Benchmark script: `make bench` → latency table pasted into the README
 
 ### Phase 5: Polish and pitch (h 40–48) · MUST
-- [ ] `make demo` runs the 3 attacks with nice terminal output
+- [x] `make demo` runs the 3 attacks with nice terminal output
 - [ ] README: 3-minute quick start, screenshots/GIF, architecture, scoring map, limitations, licenses
 - [ ] Clean-machine test: fresh clone → `docker compose up` → `make test` (a teammate who did not build it does this)
 - [ ] Rehearse the pitch twice with a timer ([04-demo-script.md](04-demo-script.md))
-- [ ] Stretch: Attack Lab page (run scenarios from the UI), Prometheus `/metrics`, Redis StateStore
+- [ ] Stretch: Attack Lab page (run scenarios from the UI), [x] Prometheus `/metrics`, Redis StateStore
 
 ## Cut lines (drop in this order if late)
 
@@ -77,6 +77,6 @@ a fixtures file and never waits on the backend.
 |---|---|
 | Ollama model download is slow on the judges' machine | Mock provider fallback + seeded data; small models; README shows the pull command |
 | HF model download fails in Docker | Download at image build time; fall back to signatures if missing |
-| Small local model is bad at tool calling | Use `qwen2.5:7b`; the demo agent can also run **scripted** tool calls (`--scripted`) so the attack path is deterministic on stage |
+| Small local model is bad at tool calling | Use `qwen2.5:7b`; the demo agent can also run **scripted** tool calls (`--mode scripted`, the default) so the attack path is deterministic on stage |
 | Integration hell at the end | API contract frozen at hour 0; frontend built on fixtures; integrate daily |
 | Flaky live demo | Pre-recorded GIF/video as backup; `make demo` is deterministic |

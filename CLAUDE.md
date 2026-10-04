@@ -33,9 +33,13 @@ cd backend && pytest -q
 # frontend
 cd frontend && npm run dev        # http://localhost:5173
 cd frontend && npm run build && npm run lint
-# whole stack (target)
-docker compose up    # must work on first try
+# whole stack, today (four terminals; `make frontend` for the dashboard)
+make gateway         # :8000, mock LLM (LLM=ollama for a real model)
+make mcp             # mock CRM/Email/Bank MCP servers :9001-9003
+make demo            # benign run + 3 attacks; `make help` lists the rest
 make test            # must pass WITHOUT Ollama or network
+# target
+docker compose up    # must work on first try
 ```
 
 ## Non-negotiable rules (hackathon constraints)

@@ -1,0 +1,66 @@
+# AgentGuard: `docker compose up` (mock LLM, works offline after the first build)
+#             `docker compose --profile ollama up` (adds Ollama + pulls qwen2.5:7b and granite3-guardian:2b)
+# Dashboard http://localhost:5173 · Gateway http://localhost:8000 · Mock MCP servers :9001-9003
+
+x-backend-image: &backend-image
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+  image: agentguard-backend
+
+services:
+  gateway:
+    <<: *backend-image
+    ports: ["8000:8000"]
+    environment:
+      POLICY_PATH: /workspace/policy.yaml   # the live repo file: edit it on the host, it hot-reloads
+      DATA_DIR: /srv/agentguard/backend/data
+      LLM_PROVIDER: auto                    # Ollama when the `ollama` profile is up, the mock LLM otherwise
+      OLLAMA_URL: http://ollama:11434
+      MCP_HOST: mcp                         # used by policy.yaml: http://${MCP_HOST:-localhost}:9001/mcp
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin}
+      WATCHFILES_FORCE_POLLING: "true"      # file events are unreliable across bind mounts
+    volumes:
+      - .:/workspace                        # a directory mount, so editor "atomic saves" are seen too
+      - agentguard-data:/srv/agentguard/backend/data
+    depends_on: [mcp]
+
+  mcp:
+    <<: *backend-image
+    command: ["python", "-m", "demo.mcp_servers", "--host", "0.0.0.0"]
+    ports: ["9001:9001", "9002:9002", "9003:9003"]
+    environment:
+      MCP_ALLOWED_HOSTS: mcp:9001,mcp:9002,mcp:9003
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 9001), 2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  dashboard:
+    build:
+      context: frontend
+      args:
+        VITE_API_URL: http://localhost:8000
+    ports: ["${DASHBOARD_PORT:-5173}:80"]
+    depends_on: [gateway]
+
+  ollama:
+    profiles: [ollama]
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes: [ollama-models:/root/.ollama]
+
+  ollama-init:
+    profiles: [ollama]
+    image: ollama/ollama:latest
+    depends_on: [ollama]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c", "sleep 3 && ollama pull qwen2.5:7b && ollama pull granite3-guardian:2b"]
+    volumes: [ollama-models:/root/.ollama]
+    restart: "no"
+
+volumes:
+  agentguard-data:
+  ollama-models:

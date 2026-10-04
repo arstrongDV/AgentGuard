@@ -58,3 +58,20 @@ async def test_feed_edit_is_applied(watched_app, settings):
     feed_path.write_text(feed_path.read_text().replace('"version": "2026-10-04"', '"version": "2026-10-05"'))
     assert await _wait_for(lambda: svc.feed.version == "2026-10-05")
     assert svc.feed.count == count
+
+
+async def test_reconcile_catches_edits_the_watcher_misses(settings):
+    """Docker bind mounts are polled by mtime+size; a same-second, same-size edit is invisible to them.
+    The reconcile loop compares content hashes, so the policy still converges."""
+    app = create_app(settings)  # watch_policy=False: no file events at all
+    async with app.router.lifespan_context(app):
+        svc = app.state.services
+        stop = asyncio.Event()
+        task = asyncio.create_task(svc.reconcile(stop, interval_s=0.05))
+        before = svc.policy.current().version
+        text = settings.policy_path.read_text()
+        settings.policy_path.write_text(text.replace("mode: enforce ", "mode: monitor "))  # same size
+        assert await _wait_for(lambda: svc.policy.current().version != before, timeout=2)
+        assert svc.policy.current().agents["support-bot"].mode == "monitor"
+        stop.set()
+        await task

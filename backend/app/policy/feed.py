@@ -53,7 +53,11 @@ EMPTY_FEED = SignatureFeed(version="none", by_stage={s: [] for s in ALL_STAGES},
 
 
 def load_feed(path: Path) -> SignatureFeed:
-    data = FeedFile.model_validate(json.loads(path.read_text(encoding="utf-8")))
+    return parse_feed(path.read_text(encoding="utf-8"))
+
+
+def parse_feed(text: str) -> SignatureFeed:
+    data = FeedFile.model_validate(json.loads(text))
     by_stage: dict[str, list[CompiledSignature]] = {s: [] for s in ALL_STAGES}
     for sig in data.signatures:
         flags = 0 if sig.case_sensitive else re.IGNORECASE

@@ -76,7 +76,8 @@ async def chat_completions(body: ChatCompletionRequest, request: Request, svc: S
     upstream_ms = round((perf_counter() - t0) * 1000, 1)
 
     # --- response side ------------------------------------------------
-    ctx_out = RequestContext(trace_id, task_id, agent, "llm_out", chat_response_texts(upstream), redactor, model=body.model)
+    ctx_out = RequestContext(trace_id, task_id, agent, "llm_out", chat_response_texts(upstream), redactor, model=body.model,
+                             proposed_tools=proposed_tool_names(upstream))
     result_out = await run_pipeline(ctx_out, rt, CHECKS)
     if result_out.decision == Decision.block:
         replace_choices(upstream, block_message(result_out, "Response"))
@@ -120,6 +121,14 @@ def blocked_response(body: ChatCompletionRequest, result: PipelineResult, status
     if body.stream:
         return StreamingResponse(as_sse_chunks(completion), media_type="text/event-stream", headers=headers)
     return JSONResponse(completion, headers=headers)
+
+
+def proposed_tool_names(completion: dict[str, Any]) -> list[str]:
+    return [
+        str((call.get("function") or {}).get("name", ""))
+        for choice in completion.get("choices") or []
+        for call in (choice.get("message") or {}).get("tool_calls") or []
+    ]
 
 
 def replace_choices(completion: dict[str, Any], message: str) -> None:

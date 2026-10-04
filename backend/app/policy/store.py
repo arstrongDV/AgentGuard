@@ -1,5 +1,7 @@
 import hashlib
 import logging
+import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -34,13 +36,21 @@ class PolicySnapshot:
         return self.agents.get(agent_id) if agent_id else None
 
 
+ENV_VAR = re.compile(r"\$\{([A-Z0-9_]+)(?::-([^}]*))?\}")
+
+
+def expand_env(text: str) -> str:
+    """${VAR} and ${VAR:-default}, so one policy.yaml works on a laptop and in Docker."""
+    return ENV_VAR.sub(lambda m: os.environ.get(m.group(1)) or (m.group(2) or ""), text)
+
+
 def version_of(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()[:8]
 
 
 def parse_policy(raw: bytes, base_dir: Path) -> PolicySnapshot:
     try:
-        data = yaml.safe_load(raw) or {}
+        data = yaml.safe_load(expand_env(raw.decode("utf-8"))) or {}
     except yaml.YAMLError as e:
         mark = getattr(e, "problem_mark", None)
         raise PolicyError(f"Invalid YAML: {e}", line=mark.line + 1 if mark else None) from e
@@ -70,10 +80,11 @@ class PolicyStore:
 
         Raises PolicyError and keeps the old snapshot when the new file is invalid.
         """
-        new = parse_policy(self.path.read_bytes(), self.path.parent)
+        raw = self.path.read_bytes()
         old = self.current()
-        if new.version == old.version:
-            return None
+        if version_of(raw) == old.version:
+            return None  # unchanged: no parse (this runs every couple of seconds)
+        new = parse_policy(raw, self.path.parent)
         self._snapshot = new  # single reference swap: atomic for readers
         return old, new
 

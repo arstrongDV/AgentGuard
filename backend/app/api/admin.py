@@ -29,7 +29,9 @@ async def health(svc: Services = Depends(get_services)):
         "status": "ok",
         "environment": svc.settings.environment,
         "llm": await svc.provider.status(),
-        "ml": "unavailable",  # T2 classifier not wired yet (Phase 3)
+        "ml": svc.ml.classifier.status if svc.ml.classifier else "disabled",
+        "ml_detail": svc.ml.classifier.detail if svc.ml.classifier else "",
+        "judge": await svc.judge_status(),
         "policy_version": svc.policy.current().version,
         "feed_version": svc.feed.version,
         "signatures": svc.feed.count,

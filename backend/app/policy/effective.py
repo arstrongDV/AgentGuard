@@ -53,9 +53,16 @@ class EffectiveAgent(BaseModel):
 
 
 def resolve_agent(agent_id: str, agent: AgentPolicy, policy: Policy) -> EffectiveAgent:
+    """Precedence: strictness set on the agent > explicit global control values > global strictness preset.
+    So `finance-bot: strictness: high` really is stricter, whatever the global defaults say."""
     strictness = agent.strictness or policy.strictness
     preset = PRESETS[strictness]
     c = policy.controls
+    own = agent.strictness is not None
+
+    def pick(global_value, preset_value):
+        return preset_value if own or global_value is None else global_value
+
     return EffectiveAgent(
         id=agent_id,
         mode=agent.mode or policy.mode,
@@ -68,17 +75,17 @@ def resolve_agent(agent_id: str, agent: AgentPolicy, policy: Policy) -> Effectiv
         budget=agent.budget,
         pii_entities=c.pii.entities,
         pii_in_action=c.pii.action,
-        pii_out_action=c.pii.outbound_action or preset["pii_out"] or c.pii.action,
+        pii_out_action=(preset["pii_out"] if own and preset["pii_out"] else None) or c.pii.outbound_action or preset["pii_out"] or c.pii.action,
         pii_result_action=c.pii.outbound_action or c.pii.action,
         pii_tool_args_action=c.pii.tool_args_action,
         secrets_in_action=c.secrets.action,
         secrets_out_action=c.secrets.outbound_action,
         banned_terms=c.banned_topics.terms,
         banned_action=c.banned_topics.action,
-        loop_max_repeats=c.loop.max_repeats or preset["loop"],
+        loop_max_repeats=pick(c.loop.max_repeats, preset["loop"]),
         loop_window_s=c.loop.window_s,
         requests_per_minute=c.rate_limit.requests_per_minute,
-        injection_threshold=c.prompt_injection.threshold or preset["injection_threshold"],
-        injection_gate=c.prompt_injection.gate if c.prompt_injection.gate is not None else preset["injection_gate"],
+        injection_threshold=pick(c.prompt_injection.threshold, preset["injection_threshold"]),
+        injection_gate=pick(c.prompt_injection.gate, preset["injection_gate"]),
         judge_enabled=c.llm_judge.enabled and preset["judge"],
     )

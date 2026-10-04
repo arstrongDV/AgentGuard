@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, events, llm, mcp
+from app.api import admin, events, llm, mcp, prometheus
 from app.config import Settings, settings as default_settings
 from app.services import Services
 
@@ -20,20 +20,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         services = Services(settings)
         app.state.services = services
         stop = asyncio.Event()
-        watcher = asyncio.create_task(services.watch(stop)) if settings.watch_policy else None
+        tasks = [asyncio.create_task(services.load_models()), asyncio.create_task(services.poll_feed(stop))]
+        if settings.watch_policy:
+            tasks.append(asyncio.create_task(services.watch(stop)))
+            tasks.append(asyncio.create_task(services.reconcile(stop)))
         try:
             yield
         finally:
             stop.set()
-            if watcher:
-                watcher.cancel()
-                await asyncio.gather(watcher, return_exceptions=True)
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
             await services.aclose()
 
     app = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins_list,
+        allow_origin_regex=settings.cors_origin_regex,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -45,6 +49,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"message": f"{settings.app_name} is running"}
 
     app.include_router(admin.router)
+    app.include_router(prometheus.router)
     app.include_router(events.router)
     app.include_router(llm.router)
     app.include_router(mcp.router)

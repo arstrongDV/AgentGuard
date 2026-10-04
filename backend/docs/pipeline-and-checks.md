@@ -15,6 +15,28 @@ recorded as a `CHECK-ERROR` finding and treated as allow (fail open), so one bro
 
 The pipeline (`core/pipeline.py`) is the only place that knows about ordering, gating and short-circuiting.
 
+## As built (2026-10-04)
+
+- T2 = `checks/semantic.py::injection` over `ml/injection.py` (ONNX Runtime + `tokenizers`, CPU, 512-token windows over
+  1600-char chunks, max wins). Loaded in a background thread at startup; SHA-256 checked against `supply_chain.pinned`.
+- T3 = `checks/semantic.py::llm_judge` over `ml/judge.py` (Ollama `/api/chat`, Granite Guardian, system prompt = risk name,
+  Yes/No). Cached 10 min; Ollama down or model missing → judge off for 30 s, skip reason in the timeline.
+- `Check.gate(ctx, rt, risk_so_far)` returns a skip reason or `None`; the pipeline records skips as timings, so
+  `/api/metrics.tier_reach` and the dashboard show how often each tier really ran.
+- **Escalation signature** `INJ-SUSPICIOUS-WORDING` (action `allow`, severity low → risk 0.3 = medium gate): wording like
+  "disregard", "from now on", "act as" sends a prompt to the classifier without blocking it. Paraphrased attacks that no
+  regex matches still reach the model; harmless prompts with the word "ignore" (which the classifier over-scores) do not.
+- **Output tool calls** (`output_tool_calls`, T1, `llm_out`): a tool call the model proposes that the agent may not use →
+  `TOOL-CALL-NOT-ALLOWED` (`controls.output_tool_calls.action`, default block).
+- Strictness precedence: strictness set **on the agent** > explicit global control values > global strictness preset.
+- **The classifier only sees prose.** It scores JSON structure itself as an injection (a plain CRM record: 0.998), so
+  tool output is parsed and only string values with ≥ 3 real words are classified (`semantic.classifiable`). Caught in the
+  Docker run with the real model, now covered by `test_attacks.py::test_every_scenario_with_the_real_classifier`.
+- Measured with `make bench` (600 mixed requests, real classifier): T0/T1 checks ≤ 0.07 ms p95 each; T2 ran on 23% of
+  pipeline runs at 22 ms p50 / 29 ms p95; gateway overhead p50 0.06 ms.
+- Hot reload has two layers: file events (watchfiles, polling in Docker) and a 2 s hash-based `reconcile` loop that
+  catches what file events miss (a same-second, same-size edit on a bind mount).
+
 ## Tiers and gating
 
 | Tier | Checks | Always runs? | Latency budget (p95) |

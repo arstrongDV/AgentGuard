@@ -78,11 +78,11 @@ event still records which checks ran and how long each took.
 
 | Service | Image / build | Port | Notes |
 |---|---|---|---|
-| `ollama` | `ollama/ollama` | 11434 | volume for models |
-| `ollama-init` | `ollama/ollama` | — | one-shot `ollama pull qwen2.5:7b granite3-guardian:2b`. If the pull fails, the backend falls back to the mock provider |
-| `backend` | `./backend` | 8000 | mounts `./policy.yaml`, `./feeds`, `./data` |
-| `mcp-crm`, `mcp-email`, `mcp-bank` | `./backend` (different command) | 9001–9003 | FastMCP streamable HTTP |
-| `frontend` | `./frontend` (build → nginx or `vite preview`) | 5173 | `VITE_API_URL=http://localhost:8000` |
+| `ollama` *(profile `ollama`)* | `ollama/ollama` | 11434 | volume for models |
+| `ollama-init` *(profile `ollama`)* | `ollama/ollama` | — | one-shot `ollama pull qwen2.5:7b` + `granite3-guardian:2b`. Until it finishes, `LLM_PROVIDER=auto` answers with the mock LLM |
+| `gateway` | `backend/Dockerfile` (context: repo root) | 8000 | mounts the repo at `/workspace` (live `policy.yaml` + `feeds/`), named volume for the audit DB |
+| `mcp` | backend image (`python -m demo.mcp_servers`) | 9001–9003 | CRM, Email, Bank in one container (MCP SDK, streamable HTTP) |
+| `dashboard` | `frontend/Dockerfile` (build → nginx) | 5173 (`DASHBOARD_PORT`) | `VITE_API_URL=http://localhost:8000` baked at build |
 
 **First-run safety net:** if Ollama is not ready, the backend still starts and the dashboard shows an
 "LLM offline (mock mode)" banner. A demo must never die because a model is still downloading.

@@ -51,6 +51,7 @@ class RequestContext:
     redactor: Redactor
     model: str | None = None
     tool: ToolRef | None = None
+    proposed_tools: list[str] = field(default_factory=list)  # tool calls the model proposed (llm_out)
     findings: list[Finding] = field(default_factory=list)
     timings: list[CheckTiming] = field(default_factory=list)
 

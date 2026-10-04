@@ -38,7 +38,7 @@ async def test_tools_list_hides_forbidden_tools(client, fake_mcp):
     support = (await client.post("/mcp/bank", json=rpc("tools/list"), headers=SUPPORT)).json()
     assert {t["name"] for t in support["result"]["tools"]} == {"search_customers", "get_customer", "send_email"}
     finance = (await client.post("/mcp/bank", json=rpc("tools/list"), headers=FINANCE)).json()
-    assert {t["name"] for t in finance["result"]["tools"]} == {"get_customer", "get_balance", "transfer_money"}
+    assert {t["name"] for t in finance["result"]["tools"]} == {"get_customer", "get_balance", "list_files", "transfer_money"}
     events = (await client.get("/api/events")).json()["items"]
     assert any(f["rule_id"] == "TOOLS-HIDDEN" for e in events for f in e["findings"])
 
@@ -147,7 +147,8 @@ async def test_auth_and_unknown_server(client, fake_mcp):
 
 
 async def test_upstream_down_returns_jsonrpc_error(client):
-    # no fake_mcp fixture: nothing listens on the configured upstream URL
+    # point the CRM at a port nobody listens on (independent of mock servers running on this machine)
+    await client.patch("/api/policy", json={"mcp_servers": {"crm": {"url": "http://127.0.0.1:1/mcp"}}}, headers=ADMIN)
     r = await client.post("/mcp/crm", json=call("get_customer", id="c-1"), headers=SUPPORT)
     assert r.json()["error"]["code"] == -32002
 

@@ -8,6 +8,7 @@ from time import perf_counter
 from app.core.context import RequestContext
 from app.core.decision import CheckResult, CheckTiming, Decision, Finding, combine, risk_score
 from app.core.text import joined
+from app.ml import MLRuntime
 from app.policy.feed import SignatureFeed, Stage
 from app.policy.store import PolicySnapshot
 from app.state import State
@@ -22,9 +23,13 @@ class Runtime:
     snapshot: PolicySnapshot
     feed: SignatureFeed
     state: State
+    ml: MLRuntime | None = None
 
 
 CheckFn = Callable[[RequestContext, Runtime], Awaitable[CheckResult]]
+# Gate: (ctx, runtime, risk so far) -> reason to skip, or None to run. This is how expensive checks
+# (ML classifier, LLM judge) only run when the cheap tiers say the traffic is worth a closer look.
+GateFn = Callable[[RequestContext, Runtime, float], str | None]
 
 
 @dataclass(frozen=True)
@@ -33,6 +38,7 @@ class Check:
     tier: int
     stages: frozenset[Stage]
     run: CheckFn
+    gate: GateFn | None = None
 
 
 @dataclass
@@ -69,6 +75,12 @@ async def run_pipeline(ctx: RequestContext, rt: Runtime, checks: list[Check]) ->
                 CheckTiming(check=check.name, tier=check.tier, ms=0.0, skipped_reason=f"short-circuit: blocked in T{blocked_tier}")
             )
             continue
+
+        if check.gate is not None:
+            reason = check.gate(ctx, rt, risk_score(ctx.findings))
+            if reason is not None:
+                ctx.timings.append(CheckTiming(check=check.name, tier=check.tier, ms=0.0, skipped_reason=reason))
+                continue
 
         t0 = perf_counter()
         try:

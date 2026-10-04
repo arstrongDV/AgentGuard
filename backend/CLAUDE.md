@@ -7,11 +7,14 @@ Design docs: [docs/](docs/README.md). Start with [docs/implementation-plan.md](d
 
 ```bash
 source venv/bin/activate
-pip install -r requirements-dev.txt        # runtime + pytest (requirements-ml.txt later, for semantic checks)
+pip install -r requirements-dev.txt -r requirements-ml.txt   # runtime + pytest + ONNX classifier
+python scripts/download_models.py          # T2 model (~740 MB) into models/, prints its sha256 (`make models`)
+python scripts/bench.py                    # overhead benchmark (`make bench`)
 uvicorn app.main:app --reload --port 8000  # OpenAPI at /docs
 pytest -q                                  # must pass with no Ollama, no internet
 pytest -q -k attacks                       # one test group
-python -m demo.agent --scenario injection  # demo agent (needs the stack running)
+python -m demo.mcp_servers                 # mock CRM/Email/Bank on :9001-9003
+python -m demo.agent --scenario injection  # demo agent (needs gateway + mock servers); --list, --mode llm
 ```
 
 ## Target layout
@@ -45,9 +48,15 @@ app/
     store.py         SQLite (aiosqlite) + JSONL append
     bus.py           in-process pub/sub that feeds SSE subscribers
   approvals.py       pending human-approval queue (asyncio futures)
+  ml/                injection.py (ONNX classifier, T2), judge.py (Granite Guardian via Ollama, T3)
+  checks/semantic.py T2/T3 checks + their gates, output tool-call check
+  providers/auto.py  Ollama when reachable, mock LLM otherwise (the default, LLM_PROVIDER=auto)
+  api/prometheus.py  GET /metrics
+scripts/             download_models.py, bench.py
+Dockerfile           gateway + mock MCP image (build context = repo root; model baked in)
 demo/
   agent.py           tool-calling loop: openai SDK → gateway, MCP client → proxy
-  mcp_servers/       crm.py, email.py, bank.py (FastMCP, streamable HTTP, json_response)
+  mcp_servers/       crm.py, email_service.py, bank.py, data.py; __main__ runs all three (MCPServer, stateless, json_response)
   scenarios.py       benign / injection / pii_leak / runaway_loop
 tests/
   cases/*.yaml       data-driven allow / block / redact cases
@@ -68,6 +77,17 @@ tests/
 - AuditEvent schema changes must be mirrored in `frontend/src/types/api.ts`.
 
 ## Gotchas
+
+- Tests run with `ml_enabled=False, judge_enabled=False`; semantic behaviour is tested with fakes in `tests/test_semantic.py`,
+  plus one real-model test that is skipped when `models/` is empty.
+- Expensive checks get a `gate=`; never call a model from a check without one.
+- Feed the classifier prose, never JSON: it scores JSON structure as an injection (see `semantic.classifiable`).
+- `docker compose run` inherits the service env (MCP_HOST...); tests clear it (`hermetic_env`), `make test-docker` uses `docker run`.
+
+- **MCP SDK is 2.x**: `FastMCP` is now `mcp.server.mcpserver.MCPServer`; the client is
+  `mcp.client.streamable_http.streamable_http_client(url, http_client=create_mcp_http_client(headers=...))` and uses `httpx2`.
+- The MCP servers' lifespan opens anyio task groups: enter and exit it in the same task (see `tests/test_attacks.py`).
+- Every scripted demo step has an `expect`; changing policy or signatures can break `tests/test_attacks.py`, which is the point.
 
 - Ollama already serves an OpenAI-compatible API at `{OLLAMA_URL}/v1/chat/completions`, so forward to it directly.
 - `stream: true`: the MVP buffers the upstream response, runs output checks, then re-emits it as SSE chunks.

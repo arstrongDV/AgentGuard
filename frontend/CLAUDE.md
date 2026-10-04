@@ -12,23 +12,26 @@ npm run build     # tsc -b && vite build. Must pass with zero type errors
 npm run lint      # oxlint
 ```
 
-## Stack (planned additions marked +)
+## Stack (+ = still to add)
 
 - React 19, TypeScript 6 (strict, `verbatimModuleSyntax`, so use `import type`), Vite 8, oxlint
-- + `react-router` for pages
-- + `@tanstack/react-query` for REST data (metrics, budgets, policy, approvals)
-- + native `EventSource` for the live feed (`/api/events/stream`). No socket libraries.
-- + `recharts` for charts
-- + `tailwindcss` v4 via `@tailwindcss/vite`
+- `react-router` v8 for pages (`BrowserRouter`, nested routes under `components/Layout.tsx`)
+- `@tanstack/react-query` for REST data (health, policy, approvals, event detail)
+- native `EventSource` for the live feed (`/api/events/stream`), one shared connection in `lib/stream.ts`. No socket libraries.
+- `tailwindcss` v4 via `@tailwindcss/vite`; tokens in `src/index.css` `@theme` (`bg surface surface-2 line fg muted accent` +
+  decision colors `allow redact approval block`). The reset lives in `@layer base` so utilities always win.
+- `clsx` for conditional classes
+- + `recharts` for charts (Overview, Budgets)
 - `react-icons` for icons: `react-icons/lu` (Lucide set) for UI icons, `react-icons/si` (Simple Icons) for brand logos
 
-## Target layout
+## Layout (built: shell, Live Feed, Approvals; the other pages are `ComingSoon` placeholders)
 
 ```
 src/
   main.tsx, App.tsx          router + QueryClientProvider + layout shell
   lib/api.ts                 fetch wrapper (base URL from import.meta.env.VITE_API_URL)
-  lib/sse.ts                 useEventStream() hook with reconnect + ring buffer
+  lib/stream.ts              useEventStream() + onSystemEvent(): shared EventSource, backfill, ring buffer, silence watchdog
+  lib/queries.ts             React Query hooks; lib/toast.ts, lib/diff.ts (redaction alignment), lib/decision.ts (colors)
   types/api.ts               AuditEvent, Finding, Decision, Policy, Budget… mirrors backend/docs/api-contract.md
   components/                DecisionBadge, RiskMeter, StatCard, RedactionDiff, EventDrawer, JsonView, EmptyState
   pages/
@@ -51,4 +54,6 @@ src/
 - Policy changes go through `PATCH /api/policy`. The backend writes `policy.yaml`, and the UI shows the new `policy_version` when the reload event arrives.
 - Keep components small and colocated. No global state library. React Query + the SSE hook are enough.
 - Dark theme first (it is a security console), and keep it readable on a projector: large numbers, high contrast.
-- Remove the Vite starter content (`App.css` hero, `assets/hero.png`) when the shell is built.
+- Decision class strings live in `lib/decision.ts`, written out in full so Tailwind can find them. Never build class names dynamically.
+- The selected event and the filters are URL params (`/feed?event=<id>&decision=block`), so any view can be linked to.
+- Port 5173 may be taken by another project: Vite then uses 5174+, and the gateway's CORS accepts any localhost port.

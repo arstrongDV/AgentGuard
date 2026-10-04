@@ -17,6 +17,14 @@ SUPPORT_KEY = "ag-support-demo-key"
 FINANCE_KEY = "ag-finance-demo-key"
 
 
+@pytest.fixture(autouse=True)
+def hermetic_env(monkeypatch):
+    """Deployment settings (docker-compose sets MCP_HOST, POLICY_PATH...) must not leak into tests."""
+    for name in ("MCP_HOST", "POLICY_PATH", "DATA_DIR", "LLM_PROVIDER", "OLLAMA_URL", "ADMIN_TOKEN", "ML_ENABLED", "JUDGE_ENABLED",
+                 "MODELS_DIR", "WATCHFILES_FORCE_POLLING"):
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture
 def policy_file(tmp_path: Path) -> Path:
     """A private copy of the real policy.yaml + feed, so tests can edit it freely."""
@@ -35,6 +43,8 @@ def settings(policy_file: Path, tmp_path: Path) -> Settings:
         llm_provider="mock",
         watch_policy=False,
         admin_token="test-admin",
+        ml_enabled=False,  # semantic tiers are tested with fakes (tests/test_semantic.py)
+        judge_enabled=False,
     )
 
 

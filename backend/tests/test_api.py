@@ -214,3 +214,9 @@ async def test_audit_export_csv_and_jsonl(client):
     r = await client.get("/api/audit/export", params={"format": "jsonl", "agent": "support-bot"})
     lines = [json.loads(line) for line in r.text.splitlines()]
     assert len(lines) == 3 and lines[0]["direction"] == "request"
+
+
+async def test_cors_allows_any_local_dev_port(client):
+    for origin, allowed in (("http://localhost:5174", True), ("http://127.0.0.1:3000", True), ("https://evil.example", False)):
+        r = await client.get("/health", headers={"Origin": origin})
+        assert (r.headers.get("access-control-allow-origin") == origin) is allowed, origin

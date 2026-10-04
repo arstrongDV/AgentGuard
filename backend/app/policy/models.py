@@ -46,6 +46,11 @@ class LlmJudgeControl(Strict):
     on_timeout: Literal["allow", "block"] = "allow"
 
 
+class OutputToolCallsControl(Strict):
+    # tool calls the MODEL proposes in its answer, checked against the agent's allowlist
+    action: Literal["block", "allow"] = "block"
+
+
 class SignaturesControl(Strict):
     feed: str = "./feeds/signatures.json"
     url: str | None = None
@@ -67,6 +72,7 @@ class Controls(Strict):
     banned_topics: BannedTopicsControl = BannedTopicsControl()
     prompt_injection: PromptInjectionControl = PromptInjectionControl()
     llm_judge: LlmJudgeControl = LlmJudgeControl()
+    output_tool_calls: OutputToolCallsControl = OutputToolCallsControl()
     signatures: SignaturesControl = SignaturesControl()
     loop: LoopControl = LoopControl()
     rate_limit: RateLimitControl = RateLimitControl()

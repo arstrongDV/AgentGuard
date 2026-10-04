@@ -21,7 +21,8 @@ Read endpoints are open in dev. Mutations need `Authorization: Bearer <ADMIN_TOK
 
 | Method | Path | Returns |
 |---|---|---|
-| GET | `/health` | `{status, environment, llm: "ollama"|"mock"|"offline", ml: "loaded"|"unavailable", policy_version, feed_version, signatures}` |
+| GET | `/health` | `{status, environment, llm: "ollama"|"mock"|"offline", ml: "loaded"|"loading"|"unavailable"|"disabled", ml_detail, judge: "available"|"unavailable"|"disabled", policy_version, feed_version, signatures}` |
+| GET | `/metrics` | Prometheus text format: `agentguard_events_total`, `agentguard_findings_total`, `agentguard_check_skipped_total`, `agentguard_check_latency_ms` (summary), approvals pending, signatures, ML loaded, policy info |
 | GET | `/api/events?limit=100&before=<event id>&agent=&decision=&category=` | `{items: AuditEvent[], next_before: string \| null}`, newest first. Paging cursor is an event id (ids sort by time), not a timestamp: many events share a millisecond. Items omit `original_text`/`redacted_text` |
 | GET | `/api/events/stream` | SSE. `event: audit` → AuditEvent (without bodies); `event: system` → SystemEvent; `event: ping` every 15 s |
 | GET | `/api/events/{id}` | AuditEvent (full, including originals) |

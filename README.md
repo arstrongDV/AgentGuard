@@ -7,8 +7,9 @@ they talk to: the language model and the tools (MCP servers). It inspects every 
 and tool result, enforces a policy, and shows every decision live in a security dashboard.
 Integration is one line: change the agent's `base_url`.
 
-> **Status:** in active development for Hackathon 2026. This README describes the target product. Build order and
-> progress: [docs/03-roadmap.md](docs/03-roadmap.md).
+> **Status:** Hackathon 2026. The gateway, MCP proxy, all four detection tiers, demo agent and Docker setup are built
+> (157 offline tests). Dashboard: Live Feed and Approvals are built; Overview, Budgets, Policy and Audit pages are next.
+> Progress: [docs/03-roadmap.md](docs/03-roadmap.md).
 
 ---
 
@@ -70,8 +71,8 @@ Every request and every response goes through the same pipeline:
 2. Policy        take a snapshot of the current policy (hot-reloaded from policy.yaml)
 3. T0 gates      model allowlist · tool allowlist · budget · rate limit · loop detection     ~0.1 ms
 4. T1 rules      attack signatures · secrets · PII (validated IBAN / Luhn) · banned topics   ~1 ms
-5. T2 classifier prompt-injection model (DeBERTa, ONNX). Runs ONLY when risky             ~20 ms
-6. T3 judge      LLM judge (Granite Guardian). Runs ONLY when still uncertain              ~0.6 s
+5. T2 classifier prompt-injection model (DeBERTa, ONNX). Runs ONLY when risky             ~30 ms
+6. T3 judge      LLM judge (Granite Guardian via Ollama). Only uncertain / high-risk       ~0.5-1 s
 7. Decide        block > needs_approval > redact > allow     (monitor mode: log, never block)
 8. Forward       to the model or the tool, with the redacted payload
 9. Output        the same checks on the response, plus exfiltration links and injection in tool results
@@ -158,11 +159,25 @@ Full script: [docs/04-demo-script.md](docs/04-demo-script.md).
 
 ## Quick start
 
-**Target (one command, no paid APIs, everything local):**
+**With Docker (no paid APIs, everything local):**
 ```bash
-docker compose up        # gateway, Ollama, mock MCP servers, dashboard
-make demo                # run the three attack scenarios
-make test                # 50+ test cases, runs offline without Ollama
+docker compose up                      # gateway :8000, mock MCP servers :9001-9003, dashboard http://localhost:5173
+docker compose --profile ollama up     # ...plus Ollama with qwen2.5:7b + granite3-guardian:2b (first run pulls ~6 GB)
+make seed                              # (needs `make install` for the demo agent) fill the dashboard with every scenario
+make test-docker                       # the test suite inside the image
+```
+Without the `ollama` profile the gateway answers with a built-in mock LLM (`/health` and the dashboard say so), so the
+whole demo works offline. The prompt-injection model is baked into the image and hash-checked on load.
+
+**Without Docker (four terminals):**
+```bash
+make install             # backend venv (+ ML) + frontend packages
+make models              # prompt-injection classifier, ~740 MB (optional: without it the gateway runs rules-only)
+make gateway             # AgentGuard on :8000 (mock LLM; `make gateway LLM=ollama` for a real model)
+make mcp                 # mock CRM / Email / Bank MCP servers on :9001-9003
+make frontend            # dashboard on http://localhost:5173 (Live Feed + Approvals)
+make demo                # normal run + 3 attacks, with every AgentGuard decision printed
+make demo-live           # finance-bot tries a transfer: approve or deny it on the Approvals page
 ```
 
 **Development setup (works today):**
@@ -170,10 +185,10 @@ make test                # 50+ test cases, runs offline without Ollama
 # backend: http://localhost:8000 (OpenAPI docs at /docs)
 cd backend
 python3 -m venv venv && source venv/bin/activate
-pip install -r requirements-dev.txt
+pip install -r requirements-dev.txt -r requirements-ml.txt
 cp .env.example .env
-uvicorn app.main:app --reload --port 8000     # LLM_PROVIDER=mock to run without Ollama
-pytest                                        # 120 tests, offline
+uvicorn app.main:app --reload --port 8000     # LLM_PROVIDER=auto (default) falls back to a mock LLM without Ollama
+pytest                                        # 157 tests, offline
 
 # frontend: http://localhost:5173
 cd frontend
@@ -199,7 +214,7 @@ Demo agent keys: `ag-support-demo-key`, `ag-finance-demo-key`. Admin token for d
 | Gateway | Python 3.13, FastAPI, httpx, pydantic, watchfiles, SQLite |
 | Detection | regex + checksum validation, signature feed, DeBERTa (ONNX Runtime), Granite Guardian via Ollama |
 | LLM | Ollama (`qwen2.5:7b`, `llama3.1:8b`) through its OpenAI-compatible API |
-| Tools | MCP (streamable HTTP), mock servers with FastMCP |
+| Tools | MCP (streamable HTTP), mock CRM / Email / Bank servers with the MCP Python SDK |
 | Dashboard | React 19, TypeScript, Vite, Recharts, Server-Sent Events |
 | Tests | pytest with data-driven YAML cases |
 
@@ -215,6 +230,23 @@ All models run locally; no paid APIs are used.
 | `llama3.1:8b` (optional) | demo agent model | Llama 3.1 Community License |
 | Llama Guard 3 (optional alternative judge) | LLM judge | Llama Community License (not Apache/MIT) |
 
+## Performance
+
+`make bench`: 600 mixed requests (benign, PII, attacks, tool calls) through the real pipeline with the real ONNX
+classifier on a laptop CPU. The LLM is mocked, so this is what AgentGuard *adds*:
+
+| Tier | Check | p50 | p95 |
+|---|---|---:|---:|
+| T0 | model allowlist, tool ACL, rate limit, budget, loop | ≤ 0.01 ms | ≤ 0.01 ms |
+| T1 | signatures (43), secrets, PII | 0.01 ms | ≤ 0.07 ms |
+| T2 | injection classifier (DeBERTa, ONNX) | 21.8 ms | 29.2 ms |
+
+- **The ML classifier ran on 23% of pipeline runs.** The rest was decided by rules in well under a millisecond.
+- Gateway overhead p50 **0.06 ms**, p95 27 ms (the p95 is the classifier reading tool results, which are always checked).
+- Tool results are unpacked: the classifier reads the *sentences* inside JSON (a `notes` field), not the JSON itself,
+  which the model would otherwise score as an injection.
+- Every check's latency and every skip reason ("risk 0.00 below gate 0.3") is recorded per event and shown in the dashboard.
+
 ## Testing
 
 Positive and negative cases are written in YAML and run with parametrized pytest:
@@ -226,12 +258,14 @@ Positive and negative cases are written in YAML and run with parametrized pytest
   input: "Contact me at anna.schmidt@example.com"
   expect: { decision: redact, rules: [PII-EMAIL], not_contains: "anna.schmidt@example.com" }
 ```
-The suite covers PII, secrets, every signature category, injection, tool ACLs, approvals, budgets, loop detection,
-monitor mode and hot reload. It needs no network, Ollama or GPU. Details: [backend/docs/testing.md](backend/docs/testing.md).
+The suite (157 tests) covers PII, secrets, every signature category, injection, tool ACLs, approvals, budgets, loop
+detection, monitor mode, hot reload, the ML and judge gates, the remote feed, and every demo scenario end to end against
+the real mock MCP servers. It needs no network, Ollama or GPU. Details: [backend/docs/testing.md](backend/docs/testing.md).
 
 ## Scalability
 
-- **Stateless request handling**: budgets, loop windows and approvals sit behind a `StateStore` interface (in-memory/SQLite now, Redis to run several replicas behind a load balancer).
+- **Stateless request handling**: all mutable state (budgets, rate and loop windows, task counters) lives in one `State` class; usage is rebuilt from the audit log on restart. A Redis implementation of the same methods is the path to several replicas behind a load balancer.
+- **Observable**: Prometheus `/metrics` (events, findings, per-check latency, skipped checks) next to the dashboard API.
 - **Drop-in**: OpenAI-compatible API, and the MCP proxy works with any MCP server.
 - **External configuration**: policy and attack feed are plain files or URLs, versioned, and hot-reloaded.
 
@@ -258,6 +292,10 @@ docs/               vision, architecture, roadmap, demo script, judging map
 - Streaming responses are buffered so that output checks can run before anything reaches the client. True token-by-token scanning is future work.
 - Regex PII detection is tuned for EU/US formats. Names need the optional NER model.
 - The audit log stores original texts for investigation. In production it should be encrypted or store only hashes.
+- The injection classifier scores raw JSON as an injection and over-scores harmless sentences containing "ignore" (e.g. "ignore the typo"). AgentGuard
+  only feeds it prose (sentences inside tool results) and only sends prompts to it when a rule raised the risk first. `strictness: high` sends
+  everything to the model, and accepts more false positives in return.
+- The LLM judge needs Ollama (`--profile ollama`); without it, the judge is skipped and the timeline says why.
 - Detection is never perfect. That is why AgentGuard layers its defences and offers monitor mode for tuning thresholds before enforcing them.
 
 ## License

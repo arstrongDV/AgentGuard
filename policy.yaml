@@ -40,28 +40,38 @@ controls:
     threshold: 0.85
     monitor_below: 0.6
     gate: 0.3                  # risk above which the ML classifier runs
-  llm_judge:
-    enabled: false
+  llm_judge:                   # T3: asked only about uncertain or high-risk traffic; skipped while Ollama is offline
+    enabled: true
     model: granite3-guardian:2b
     only_for_risk_above: 0.5
     timeout_s: 3
     on_timeout: allow
+  output_tool_calls:
+    action: block              # the model proposes a tool this agent may not use (allow = only flag it)
   signatures:
     feed: ./feeds/signatures.json
+    # url: https://example.com/agentguard/signatures.json   # optional remote feed, polled every refresh_s
     refresh_s: 60
   loop:
     window_s: 60               # max_repeats comes from strictness (low 8, medium 5, high 3)
   rate_limit:
     requests_per_minute: 60
 
-# Fixed upstreams: the proxy is never an open relay.
+# Fixed upstreams: the proxy is never an open relay. ${MCP_HOST} is "mcp" inside Docker.
 mcp_servers:
   crm:
-    url: http://localhost:9001/mcp
+    url: http://${MCP_HOST:-localhost}:9001/mcp
   email:
-    url: http://localhost:9002/mcp
+    url: http://${MCP_HOST:-localhost}:9002/mcp
   bank:
-    url: http://localhost:9003/mcp
+    url: http://${MCP_HOST:-localhost}:9003/mcp
+
+# Supply chain: a model file whose hash differs is never loaded (`make models` prints the hash).
+supply_chain:
+  pinned:
+    protectai/deberta-v3-base-prompt-injection-v2:
+      sha256: f0ea7f239f765aedbde7c9e163a7cb38a79c5b8853d3f76db5152172047b228c
+  allowed_hf_orgs: [protectai, ibm-granite]
 
 high_risk_tools: [transfer_money, send_email]
 
@@ -83,7 +93,7 @@ agents:
     description: Back-office payments assistant
     key_sha256: 1f8b71f47a4efb568f97d7ff89af756e6abce258547d81fb74f325f9c121030b  # demo key: ag-finance-demo-key
     strictness: high
-    tools_allowed: [get_customer, get_balance]
+    tools_allowed: [get_customer, get_balance, list_files]
     tools_need_approval: [transfer_money]
     tool_args:
       transfer_money:

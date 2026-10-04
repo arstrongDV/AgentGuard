@@ -1,8 +1,9 @@
 # Backend Implementation Plan
 
-**Status (2026-10-04): steps 1–6, 9 and 10 are implemented**, plus the MCP proxy part of step 5. 120 tests pass offline.
-Not yet built: mock MCP servers + demo agent (steps 5/7), semantic layer (step 8), the signature feed *URL* refresh
-(file reload works), `bench.py`, packaging (step 11). Implementation notes that differ from the original plan:
+**Status (2026-10-04): all steps are implemented**, including the semantic layer (step 8), Prometheus, `make bench` and
+Docker packaging (step 11), verified: `docker compose up`, every demo scenario against the containers, hot reload
+from a host edit, 157 tests inside the image. 157 tests pass offline. Remaining ideas, not planned: Redis StateStore, token-by-token
+streaming scans, Presidio NER. Earlier notes: Implementation notes that differ from the original plan:
 - Audit store uses stdlib `sqlite3` behind a lock instead of `aiosqlite` (sub-millisecond writes, one less dependency).
 - SSE is a plain `StreamingResponse`; `sse-starlette` is not needed.
 - Policy edits use `ruamel.yaml` round-trip so comments survive dashboard changes.
@@ -88,7 +89,7 @@ Files: `checks/budget.py`, `checks/loop.py`, `state.py` (StateStore interface + 
 ### Step 7: Demo agent (C)
 Files: `demo/agent.py`, `demo/scenarios.py`.
 - `openai.OpenAI(base_url="http://localhost:8000/v1", api_key=<agent key>)` + MCP client over streamable HTTP to `http://localhost:8000/mcp/{server}`.
-- `--scripted` mode: a deterministic sequence of tool calls (no LLM reasoning) so the stage demo never depends on model behaviour.
+- `--mode scripted` (default): a deterministic sequence of tool calls (no LLM reasoning) so the stage demo never depends on model behaviour. `--mode llm` lets a real model drive.
 - Pretty terminal output (`rich`): each step shows the AgentGuard decision.
 
 ### Step 8: Semantic layer (B)
